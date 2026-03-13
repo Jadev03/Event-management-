@@ -71,13 +71,24 @@ export function Login({ onLogin, error }) {
             </div>
           </div>
 
-          {error && (
-            <p className="text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-2xl px-4 py-3">
-              {error}
-            </p>
-          )}
+          {/* Reserve space so layout doesn't jump when error appears */}
+          <div className="min-h-[3rem]">
+            {error && (
+              <p className="text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-2xl px-4 py-3">
+                {error}
+              </p>
+            )}
+          </div>
 
-          <div className="flex justify-end">
+          <button
+            type="submit"
+            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98]"
+          >
+            Sign In
+            <ArrowRight size={20} />
+          </button>
+
+          <div className="flex justify-center">
             <button
               type="button"
               className="text-sm font-medium text-indigo-600 hover:underline"
@@ -90,14 +101,6 @@ export function Login({ onLogin, error }) {
               Forgot password?
             </button>
           </div>
-
-          <button
-            type="submit"
-            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98]"
-          >
-            Sign In
-            <ArrowRight size={20} />
-          </button>
         </form>
       </motion.div>
     </div>
