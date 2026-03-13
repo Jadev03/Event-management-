@@ -10,14 +10,26 @@ import { users as baseUsers } from './data/users.js'
 const MAX_FAILED_ATTEMPTS = 5
 const ATTEMPT_WINDOW_MINUTES = 10
 
+// Dummy failed login attempts so "Most failed login attempts" shows data (counts > 0)
+const _now = Date.now()
+const _hour = 60 * 60 * 1000
+const DUMMY_FAILED_ATTEMPTS = [
+  { email: 'student1@university.ac.lk', success: false, timestamp: _now - 3 * _hour },
+  { email: 'student1@university.ac.lk', success: false, timestamp: _now - 2 * _hour },
+  { email: 'student1@university.ac.lk', success: false, timestamp: _now - 1 * _hour },
+  { email: 'faculty1@university.ac.lk', success: false, timestamp: _now - 5 * _hour },
+  { email: 'faculty1@university.ac.lk', success: false, timestamp: _now - 4 * _hour },
+  { email: 'organizer1@university.ac.lk', success: false, timestamp: _now - 6 * _hour },
+]
+
 const AppContent = () => {
   const [currentUser, setCurrentUser] = useState(null)
   const [error, setError] = useState('')
 
   const [extraUsers, setExtraUsers] = useState([])
 
-  // Simple in-memory security analytics for admin
-  const [loginAttempts, setLoginAttempts] = useState([])
+  // Simple in-memory security analytics for admin (pre-seeded with dummy failed attempts)
+  const [loginAttempts, setLoginAttempts] = useState(DUMMY_FAILED_ATTEMPTS)
   const [lockedEmails, setLockedEmails] = useState({})
   const [deactivatedEmails, setDeactivatedEmails] = useState({})
 

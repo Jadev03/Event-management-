@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Menu,
   MoreHorizontal,
+  Pencil,
   Search,
   ShieldCheck,
   Users,
@@ -87,6 +88,9 @@ export function AdminDashboard({
   const [newEmail, setNewEmail] = useState('')
   const [newRole, setNewRole] = useState('student')
   const [lastCreatedUser, setLastCreatedUser] = useState(null)
+  const [roleOverrides, setRoleOverrides] = useState({})
+  const [editingEmail, setEditingEmail] = useState(null)
+  const [editingRole, setEditingRole] = useState('student')
 
   const generatePassword = () => {
     const chars =
@@ -147,6 +151,7 @@ export function AdminDashboard({
     return users
       .map((u) => {
         const key = u.email.toLowerCase()
+        const effectiveRole = roleOverrides[key] ?? u.role
         const attemptsForUser = loginAttempts.filter((a) => a.email === key)
         const failedRecent = attemptsForUser.filter(
           (a) => !a.success && now - a.timestamp <= windowMs,
@@ -168,6 +173,7 @@ export function AdminDashboard({
         return {
           ...u,
           key,
+          role: effectiveRole,
           failedRecent: failedRecent.length,
           totalFailed,
           lastAttempt,
@@ -200,6 +206,13 @@ export function AdminDashboard({
     [loginAttempts, users],
   )
 
+  const securityStats = useMemo(() => {
+    const total = recentSecurityLogs.length
+    const failed = recentSecurityLogs.filter((l) => l.type === 'danger').length
+    const successful = total - failed
+    return { total, failed, successful }
+  }, [recentSecurityLogs])
+
   const recentUsers = useMemo(
     () => [...users].slice(-5).reverse(),
     [users],
@@ -208,6 +221,7 @@ export function AdminDashboard({
   const topFailedUsers = useMemo(
     () =>
       [...enrichedUsers]
+        .filter((u) => u.totalFailed > 0)
         .sort((a, b) => b.totalFailed - a.totalFailed)
         .slice(0, 5),
     [enrichedUsers],
@@ -319,20 +333,25 @@ export function AdminDashboard({
           {/* Page header actions */}
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                Admin Dashboard
-              </h1>
-              <p className="text-slate-500 mt-1">
-                Global system overview, role management, and security analytics.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button className="px-4 py-2 bg-white border border-black/5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors">
-                Download audit logs
-              </button>
-              <button className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
-                Security settings
-              </button>
+              {activeTab === 'users' ? (
+                <>
+                  <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                    Users &amp; Roles
+                  </h1>
+                  <p className="text-slate-500 mt-1">
+                    Manage university users, roles, and access controls.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                    Admin Dashboard
+                  </h1>
+                  <p className="text-slate-500 mt-1">
+                    Global system overview, role management, and security analytics.
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -628,58 +647,132 @@ export function AdminDashboard({
 
           {/* Security tab */}
           {activeTab === 'security' && (
-            <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-900 mb-6">
-                Recent security activity
-              </h2>
-              <div className="space-y-6">
-                {recentSecurityLogs.length === 0 && (
-                  <p className="text-sm text-slate-500">
-                    No recent login activity yet. Failed and suspicious attempts
-                    will appear here.
+            <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm space-y-6">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Login security overview
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    See failed login counts for every user and decide whether to keep accounts active or deactivate them.
                   </p>
-                )}
-                {recentSecurityLogs.map((log, index) => (
-                  <div
-                    key={`${log.user}-${log.time}-${index}`}
-                    className="flex gap-4"
-                  >
-                    <div
-                      className={cn(
-                        'w-10 h-10 rounded-xl shrink-0 flex items-center justify-center',
-                        log.type === 'danger'
-                          ? 'bg-red-50 text-red-600'
-                          : 'bg-indigo-50 text-indigo-600',
-                      )}
-                    >
-                      {log.type === 'danger' ? (
-                        <AlertTriangle size={18} />
-                      ) : (
-                        <ShieldCheck size={18} />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-bold text-slate-900 truncate">
-                          {log.action}
-                        </p>
-                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
-                          {log.time}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        <span className="font-semibold text-slate-700">
-                          {log.user}
-                        </span>{' '}
-                        ({log.target})
-                      </p>
-                    </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="px-3 py-2 rounded-2xl bg-slate-50 border border-black/5">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                      Total users
+                    </p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {enrichedUsers.length}
+                    </p>
                   </div>
-                ))}
+                  <div className="px-3 py-2 rounded-2xl bg-red-50 border border-red-100">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-red-500">
+                      Users with failures
+                    </p>
+                    <p className="text-sm font-bold text-red-700">
+                      {enrichedUsers.filter((u) => u.totalFailed > 0).length}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <button className="w-full mt-8 py-3 rounded-2xl border border-black/5 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
-                View full security logs
-              </button>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-black/5">
+                    <tr>
+                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        User
+                      </th>
+                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Role
+                      </th>
+                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Total failed logins
+                      </th>
+                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Failed in last {ATTEMPT_WINDOW_MINUTES}m
+                      </th>
+                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Last attempt
+                      </th>
+                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Status
+                      </th>
+                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5">
+                    {[...enrichedUsers]
+                      .sort((a, b) => b.totalFailed - a.totalFailed)
+                      .map((u) => {
+                        const isDeactivated = u.isDeactivated
+                        const statusLabel = isDeactivated ? 'Deactivated' : 'Active'
+                        const statusClass = isDeactivated
+                          ? 'bg-red-50 text-red-600 border-red-100'
+                          : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+
+                        return (
+                          <tr key={u.email} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-8 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                                  {u.username?.charAt(0) ?? u.email.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {u.username}
+                                  </p>
+                                  <p className="text-xs text-slate-500">{u.email}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-8 py-4 text-xs font-bold text-slate-600">
+                              {formatRole(u.role)}
+                            </td>
+                            <td className="px-8 py-4 text-sm text-slate-700">
+                              {u.totalFailed}
+                            </td>
+                            <td className="px-8 py-4 text-sm text-slate-700">
+                              {u.failedRecent}
+                            </td>
+                            <td className="px-8 py-4 text-sm text-slate-700">
+                              {formatShortTime(u.lastAttempt)}
+                            </td>
+                            <td className="px-8 py-4">
+                              <span
+                                className={cn(
+                                  'px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border',
+                                  statusClass,
+                                )}
+                              >
+                                {statusLabel}
+                              </span>
+                            </td>
+                            <td className="px-8 py-4">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onToggleDeactivate && onToggleDeactivate(u.email)
+                                }
+                                className={cn(
+                                  'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors',
+                                  isDeactivated
+                                    ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                    : 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100',
+                                )}
+                              >
+                                {isDeactivated ? 'Activate' : 'Deactivate'}
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -687,23 +780,23 @@ export function AdminDashboard({
           {activeTab === 'users' && (
             <div className="bg-white rounded-[32px] border border-black/5 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-black/5 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Admin Dashboard
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Manage university users, roles, and access controls.
-                  </p>
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-semibold text-slate-900">
+                    Choose view
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Switch between managing users and adding new accounts.
+                  </span>
                 </div>
-                <div className="inline-flex items-center gap-1 rounded-2xl bg-slate-50 p-1 border border-black/5">
+                <div className="inline-flex items-center gap-1 rounded-2xl bg-indigo-50/60 p-1 border border-indigo-100 shadow-sm">
                   <button
                     type="button"
                     onClick={() => setUsersTab('list')}
                     className={cn(
-                      'px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors',
+                      'px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors',
                       usersTab === 'list'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800',
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'bg-transparent text-slate-600 hover:text-slate-900',
                     )}
                   >
                     User &amp; role management
@@ -712,10 +805,10 @@ export function AdminDashboard({
                     type="button"
                     onClick={() => setUsersTab('add')}
                     className={cn(
-                      'px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors',
+                      'px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors',
                       usersTab === 'add'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800',
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-transparent text-slate-600 hover:text-slate-900',
                     )}
                   >
                     Add user
@@ -733,7 +826,7 @@ export function AdminDashboard({
                       </span>
                       <span>•</span>
                       <span>
-                        Review Students, Faculty Coordinators, Organizers, and Admins.
+                        Review Students, Faculty Coordinators and  Organizers.
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -784,6 +877,7 @@ export function AdminDashboard({
                           const statusClass = isDeactivated
                             ? 'bg-red-50 text-red-600 border-red-100'
                             : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                          const isEditing = editingEmail === entry.email
 
                           return (
                             <tr
@@ -806,9 +900,24 @@ export function AdminDashboard({
                                 </div>
                               </td>
                               <td className="px-8 py-4">
-                                <span className="text-xs font-bold text-slate-600">
-                                  {formatRole(entry.role)}
-                                </span>
+                                {isEditing ? (
+                                  <select
+                                    value={editingRole}
+                                    onChange={(e) => setEditingRole(e.target.value)}
+                                    className="px-3 py-1.5 rounded-xl border border-black/5 bg-slate-50 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                  >
+                                    <option value="student">Student</option>
+                                    <option value="facultyCoordinator">
+                                      Faculty Coordinator
+                                    </option>
+                                    <option value="organizer">Organizer</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                ) : (
+                                  <span className="text-xs font-bold text-slate-600">
+                                    {formatRole(entry.role)}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-8 py-4">
                                 <span
@@ -828,27 +937,65 @@ export function AdminDashboard({
                               </td>
                               <td className="px-8 py-4">
                                 <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      onToggleDeactivate &&
-                                      onToggleDeactivate(entry.email)
-                                    }
-                                    className={cn(
-                                      'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors',
-                                      isDeactivated
-                                        ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                                        : 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100',
-                                    )}
-                                  >
-                                    {isDeactivated ? 'Activate' : 'Deactivate'}
-                                  </button>
-                                  <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                                    <MoreHorizontal
-                                      size={18}
-                                      className="text-slate-400"
-                                    />
-                                  </button>
+                                  {isEditing ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const key = entry.email.toLowerCase()
+                                          setRoleOverrides((prev) => ({
+                                            ...prev,
+                                            [key]: editingRole,
+                                          }))
+                                          setEditingEmail(null)
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingEmail(null)
+                                          setEditingRole(entry.role)
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          onToggleDeactivate &&
+                                          onToggleDeactivate(entry.email)
+                                        }
+                                        className={cn(
+                                          'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors',
+                                          isDeactivated
+                                            ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                            : 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100',
+                                        )}
+                                      >
+                                        {isDeactivated ? 'Activate' : 'Deactivate'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingEmail(entry.email)
+                                          setEditingRole(entry.role)
+                                        }}
+                                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                                      >
+                                        <Pencil
+                                          size={18}
+                                          className="text-slate-400"
+                                        />
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                             </tr>
