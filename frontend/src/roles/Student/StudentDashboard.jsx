@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   Bell,
@@ -15,7 +15,13 @@ import {
   Users,
   ArrowRight,
   LogOut,
+  Download,
+  Share2,
+  Info,
 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
+import { toPng } from 'html-to-image'
+import jsPDF from 'jspdf'
 import {
   AreaChart,
   Area,
@@ -562,11 +568,52 @@ function StudentEventsSection() {
 }
 
 function StudentTicketsSection({ user }) {
-  const ticket = {
-    event: MOCK_EVENTS[0],
-    id: 'TKT-99283-STU',
-    userName: user.username,
-    status: 'valid',
+  const tickets = useMemo(
+    () =>
+      MOCK_EVENTS.map((event, idx) => ({
+        event,
+        id: `TKT-${String(99283 + idx).padStart(5, '0')}-STU`,
+        userName: user.username,
+        status: 'valid',
+      })),
+    [user.username],
+  )
+
+  const cardRefs = useRef({})
+
+  const downloadTicketPdf = async (ticketId) => {
+    const node = cardRefs.current[ticketId]
+    if (!node) return
+
+    const dataUrl = await toPng(node, {
+      cacheBust: true,
+      pixelRatio: 2,
+      backgroundColor: '#FFFFFF',
+    })
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+
+    const imgProps = pdf.getImageProperties(dataUrl)
+    const imgRatio = imgProps.width / imgProps.height
+
+    const margin = 36
+    const maxWidth = pageWidth - margin * 2
+    const maxHeight = pageHeight - margin * 2
+
+    let renderWidth = maxWidth
+    let renderHeight = renderWidth / imgRatio
+    if (renderHeight > maxHeight) {
+      renderHeight = maxHeight
+      renderWidth = renderHeight * imgRatio
+    }
+
+    const x = (pageWidth - renderWidth) / 2
+    const y = (pageHeight - renderHeight) / 2
+
+    pdf.addImage(dataUrl, 'PNG', x, y, renderWidth, renderHeight)
+    pdf.save(`${ticketId}.pdf`)
   }
 
   return (
@@ -581,95 +628,154 @@ function StudentTicketsSection({ user }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-2xl shadow-indigo-100 flex flex-col">
-          <div className="h-32 bg-indigo-600 p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-            <div className="relative z-10">
-              <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-widest rounded-full border border-white/10">
-                Confirmed ticket
-              </span>
-              <h3 className="text-xl font-bold text-white mt-3 leading-tight">
-                {ticket.event.title}
-              </h3>
+      {tickets.map((ticket) => (
+        <div key={ticket.id} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Ticket card */}
+          <motion.div
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="bg-white rounded-[40px] overflow-hidden border border-black/5 shadow-2xl shadow-indigo-100 flex flex-col"
+            ref={(el) => {
+              if (el) cardRefs.current[ticket.id] = el
+            }}
+          >
+            <div className="h-40 bg-indigo-600 p-8 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
+              <div className="relative z-10">
+                <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-widest rounded-full border border-white/10">
+                  Confirmed ticket
+                </span>
+                <h3 className="text-2xl font-bold text-white mt-4 leading-tight">
+                  {ticket.event.title}
+                </h3>
+              </div>
             </div>
-          </div>
 
-          <div className="p-6 space-y-6">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  Date &amp; time
-                </p>
-                <p className="font-semibold text-slate-900">
-                  {ticket.event.dateLabel}
-                </p>
-                <p className="text-xs text-slate-500">{ticket.event.time}</p>
+            <div className="p-8 flex-1 space-y-8">
+              {/* QR */}
+              <div className="flex justify-center py-2">
+                <div className="p-6 bg-white rounded-[32px] border-2 border-dashed border-indigo-100 flex flex-col items-center">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-black/5 mb-4">
+                    <QRCodeSVG
+                      value={`ticket:${ticket.id}`}
+                      size={180}
+                      level="H"
+                    />
+                  </div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    {ticket.id}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  Location
-                </p>
-                <p className="font-semibold text-slate-900">
-                  {ticket.event.location}
-                </p>
-                <p className="text-xs text-slate-500">Main campus</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  Attendee
-                </p>
-                <p className="font-semibold text-slate-900">{ticket.userName}</p>
-                <p className="text-xs text-slate-500">Student</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  Status
-                </p>
-                <div className="flex items-center gap-1.5 text-emerald-600 text-sm font-bold">
-                  <CheckCircle2 size={14} />
-                  Valid entry
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Date &amp; time
+                  </p>
+                  <p className="text-sm font-bold text-slate-900">
+                    {ticket.event.dateLabel}
+                  </p>
+                  <p className="text-xs text-slate-500">{ticket.event.time}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Location
+                  </p>
+                  <p className="text-sm font-bold text-slate-900">
+                    {ticket.event.location}
+                  </p>
+                  <p className="text-xs text-slate-500">Main campus</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Attendee
+                  </p>
+                  <p className="text-sm font-bold text-slate-900">
+                    {ticket.userName}
+                  </p>
+                  <p className="text-xs text-slate-500">Student</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Status
+                  </p>
+                  <div className="flex items-center gap-1.5 text-emerald-600 text-sm font-bold">
+                    <CheckCircle2 size={14} />
+                    Valid entry
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-dashed border-indigo-100 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-              Present this ticket at the event entrance. A QR or barcode can be added
-              here later to match the full UniEvent implementation.
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-[28px] border border-black/5 shadow-sm">
-            <h3 className="text-base font-bold text-slate-900 mb-3">
-              Entry instructions
-            </h3>
-            <ul className="space-y-3 text-sm text-slate-600">
-              <li>Arrive at least 15 minutes before the event starts.</li>
-              <li>Keep your student ID card with you for verification.</li>
-              <li>This ticket is valid for a single entry only.</li>
-              <li>
-                Follow any additional instructions sent to your university email.
-              </li>
-            </ul>
-          </div>
-
-          <div className="bg-indigo-600 p-6 rounded-[28px] text-white relative overflow-hidden">
-            <div className="relative z-10 space-y-2">
-              <h3 className="text-base font-bold">Need help?</h3>
-              <p className="text-sm text-indigo-100">
-                If you have issues with your ticket or event registration, contact
-                the student help desk.
-              </p>
-              <button className="mt-2 inline-flex items-center justify-center px-4 py-2 rounded-2xl bg-white text-indigo-600 text-sm font-bold hover:bg-indigo-50 transition-colors">
-                Contact support
+            <div className="p-6 bg-slate-50 border-t border-black/5 flex items-center justify-between">
+              <button
+                onClick={() => downloadTicketPdf(ticket.id)}
+                className="flex items-center gap-2 text-slate-600 font-bold text-sm hover:text-indigo-600 transition-colors"
+              >
+                <Download size={18} /> Save PDF
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  navigator.clipboard?.writeText(`ticket:${ticket.id}`)
+                }
+                className="flex items-center gap-2 text-slate-600 font-bold text-sm hover:text-indigo-600 transition-colors"
+              >
+                <Share2 size={18} /> Share
               </button>
             </div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
+          </motion.div>
+
+          {/* Instructions & Help */}
+          <div className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm"
+            >
+              <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <Info size={20} className="text-indigo-600" />
+                Entry Instructions
+              </h3>
+              <ul className="space-y-4">
+                {[
+                  'Please arrive at least 15 minutes before the event starts.',
+                  'Keep your QR code ready on your mobile device.',
+                  'This ticket is valid for one-time entry only.',
+                  'Make sure your screen brightness is high for scanning.',
+                ].map((text, idx) => (
+                  <li key={idx} className="flex gap-3 text-sm text-slate-600">
+                    <div className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 font-bold text-[10px]">
+                      {idx + 1}
+                    </div>
+                    {text}
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.08 }}
+              className="bg-indigo-600 p-8 rounded-[32px] text-white relative overflow-hidden"
+            >
+              <div className="relative z-10">
+                <h3 className="text-lg font-bold mb-2">Need Help?</h3>
+                <p className="text-indigo-100 text-sm mb-6">
+                  If you have any issues with your ticket or entry, contact the
+                  event organizer.
+                </p>
+                <button className="bg-white text-indigo-600 px-6 py-3 rounded-2xl font-bold text-sm hover:bg-indigo-50 transition-colors">
+                  Contact Support
+                </button>
+              </div>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
+            </motion.div>
           </div>
         </div>
-      </div>
+      ))}
     </section>
   )
 }
