@@ -69,6 +69,78 @@ const MOCK_EVENTS = [
     capacity: 80,
     image: 'https://picsum.photos/seed/research-2026/800/400',
   },
+  {
+    id: 'e4',
+    title: 'Web Dev Bootcamp: React + Vite',
+    description: 'Hands-on session building modern UIs and shipping fast.',
+    dateLabel: 'May 28, 2026',
+    time: '02:00 PM',
+    location: 'Lab 3 (CS Building)',
+    category: 'workshop',
+    registeredCount: 76,
+    capacity: 120,
+    image: 'https://picsum.photos/seed/code-lab/800/400',
+  },
+  {
+    id: 'e5',
+    title: 'Career Fair 2026',
+    description: 'Meet recruiters, get CV feedback, and discover internships.',
+    dateLabel: 'Jun 05, 2026',
+    time: '09:30 AM',
+    location: 'Auditorium',
+    category: 'social',
+    registeredCount: 420,
+    capacity: 900,
+    image: 'https://picsum.photos/seed/career-fair/800/400',
+  },
+  {
+    id: 'e6',
+    title: 'Design Meetup: UI/UX Critique Night',
+    description: 'Bring your portfolio—get actionable feedback from peers.',
+    dateLabel: 'Jun 08, 2026',
+    time: '06:00 PM',
+    location: 'Creative Studio',
+    category: 'social',
+    registeredCount: 58,
+    capacity: 90,
+    image: 'https://picsum.photos/seed/design-ux/800/400',
+  },
+  {
+    id: 'e7',
+    title: 'Math Olympiad Qualifier',
+    description: 'Challenge round for students competing in the national event.',
+    dateLabel: 'Jun 12, 2026',
+    time: '11:00 AM',
+    location: 'Lecture Hall 2',
+    category: 'academic',
+    registeredCount: 38,
+    capacity: 60,
+    image: 'https://picsum.photos/seed/math-olympiad/800/400',
+  },
+  {
+    id: 'e8',
+    title: 'Inter-Faculty Badminton Cup',
+    description: 'Register your team and play for your faculty.',
+    dateLabel: 'Jun 18, 2026',
+    time: '04:00 PM',
+    location: 'Indoor Sports Complex',
+    category: 'sports',
+    registeredCount: 144,
+    capacity: 240,
+    image: 'https://picsum.photos/seed/badminton/800/400',
+  },
+  {
+    id: 'e9',
+    title: 'Open Mic + Acoustic Night',
+    description: 'Sing, play, or just chill—student talents on stage.',
+    dateLabel: 'Jun 22, 2026',
+    time: '07:30 PM',
+    location: 'Student Center Courtyard',
+    category: 'social',
+    registeredCount: 210,
+    capacity: 350,
+    image: 'https://picsum.photos/seed/open-mic/800/400',
+  },
 ]
 
 const WEEKLY_ACTIVITY_DATA = [
@@ -491,7 +563,7 @@ function StudentEventsSection() {
         </div>
         <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-black/5 shadow-sm">
           <span className="text-xs font-semibold text-slate-500">Filter:</span>
-          {['all', 'workshop', 'sports', 'academic'].map((cat) => (
+          {['all', 'academic', 'workshop', 'sports', 'social'].map((cat) => (
             <button
               key={cat}
               onClick={() => setFilter(cat)}
