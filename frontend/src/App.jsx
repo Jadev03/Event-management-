@@ -154,8 +154,8 @@ const AppContent = () => {
         },
       )
 
-      // Expecting shape like: { accessToken, refreshToken?, user: { id, name, email, role } }
-      const { accessToken, user } = response.data || {}
+      // Backend returns: { message, user, token, refreshToken }
+      const { token, refreshToken, user } = response.data || {}
 
       if (!user) {
         setError('Unexpected server response. Please try again.')
@@ -164,8 +164,11 @@ const AppContent = () => {
         return
       }
 
-      if (accessToken) {
-        localStorage.setItem('accessToken', accessToken)
+      if (token) {
+        localStorage.setItem('accessToken', token)
+      }
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken)
       }
 
       const mappedUser = {
@@ -187,9 +190,33 @@ const AppContent = () => {
     }
   }
 
-  const handleLogout = () => {
-    setCurrentUser(null)
-    setError('')
+  const handleLogout = async () => {
+    const accessToken = localStorage.getItem('accessToken')
+    const refreshToken = localStorage.getItem('refreshToken')
+
+    try {
+      if (accessToken || refreshToken) {
+        await axios.post(
+          `${API_BASE_URL}/api/auth/logout`,
+          { refreshToken },
+          {
+            headers: {
+              Authorization: accessToken ? `Bearer ${accessToken}` : undefined,
+              'Content-Type': 'application/json',
+            },
+          },
+        )
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Error during logout', err)
+      // We still clear local state/tokens even if backend call fails
+    } finally {
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      setCurrentUser(null)
+      setError('')
+    }
   }
 
   if (!currentUser) {
