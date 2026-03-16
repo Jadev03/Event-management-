@@ -157,6 +157,20 @@ const refreshAccessToken = (req, res) => {
   }
 };
 
+const requireAdmin = (req, res, next) => {
+  const user = req.user;
+
+  if (!user || user.role !== 'admin') {
+    logger.warn('Non-admin user attempted to access admin-only route', {
+      userId: user?.id,
+      role: user?.role,
+    });
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+
+  return next();
+};
+
 const logout = (req, res) => {
   try {
     const authHeader = req.headers.authorization || '';
@@ -181,6 +195,7 @@ const logout = (req, res) => {
 module.exports = {
   issueJwt,
   authenticate,
+  requireAdmin,
   refreshAccessToken,
   logout,
 };

@@ -4,6 +4,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { logger, requestLogger } = require('./utils/logger');
 const authRoutes = require('./routes/auth.routes');
+const adminRoutes = require('./routes/admin.routes');
+const { authenticate, requireAdmin } = require('./middleware/auth.middleware');
 
 dotenv.config();
 
@@ -14,6 +16,7 @@ app.use(express.json());
 app.use(requestLogger);
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', authenticate, requireAdmin, adminRoutes);
 
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI =
