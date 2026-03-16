@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import axios from 'axios'
 
 import { Login } from './components/Login.jsx'
 import { AdminDashboard } from './roles/Admin/AdminDashboard.jsx'
@@ -9,6 +10,10 @@ import { users as baseUsers } from './data/users.js'
 
 const MAX_FAILED_ATTEMPTS = 5
 const ATTEMPT_WINDOW_MINUTES = 10
+
+// Prefer Vite env, fall back to local dev URL
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
 // Dummy failed login attempts so "Most failed login attempts" shows data (counts > 0)
 const _now = Date.now()
@@ -114,7 +119,7 @@ const AppContent = () => {
     })
   }
 
-  const handleLogin = (email, password) => {
+  const handleLogin = async (email, password) => {
     const trimmedEmail = email.trim().toLowerCase()
     const trimmedPassword = password.trim()
 
@@ -135,22 +140,51 @@ const AppContent = () => {
       return
     }
 
-    const allUsers = [...baseUsers, ...extraUsers]
-    const matchedUser = allUsers.find(
-      (u) =>
-        u.email.toLowerCase() === trimmedEmail && u.password === trimmedPassword,
-    )
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/auth/login`,
+        {
+          email: trimmedEmail,
+          password: trimmedPassword,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      )
 
-    if (!matchedUser) {
-      setError('Invalid university email or password.')
+      // Expecting shape like: { accessToken, refreshToken?, user: { id, name, email, role } }
+      const { accessToken, user } = response.data || {}
+
+      if (!user) {
+        setError('Unexpected server response. Please try again.')
+        setCurrentUser(null)
+        recordLoginAttempt(trimmedEmail, false)
+        return
+      }
+
+      if (accessToken) {
+        localStorage.setItem('accessToken', accessToken)
+      }
+
+      const mappedUser = {
+        id: user.id,
+        email: user.email,
+        username: user.name,
+        role: user.role,
+      }
+
+      recordLoginAttempt(trimmedEmail, true)
+      setCurrentUser(mappedUser)
+      setError('')
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err)
+      setError('Unable to connect to server. Please try again later.')
       setCurrentUser(null)
-       recordLoginAttempt(trimmedEmail, false)
-      return
+      recordLoginAttempt(trimmedEmail, false)
     }
-
-    recordLoginAttempt(trimmedEmail, true)
-    setCurrentUser(matchedUser)
-    setError('')
   }
 
   const handleLogout = () => {
