@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
+import axios from 'axios'
 import {
   Bell,
   Calendar,
@@ -617,12 +618,70 @@ function StudentOverviewSection({
 }
 
 function StudentEventsSection() {
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+
   const [filter, setFilter] = useState('all')
+  const [events, setEvents] = useState([])
+  const [loadStatus, setLoadStatus] = useState('idle') // idle | loading
+  const [loadError, setLoadError] = useState('')
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setLoadError('You are not logged in.')
+      setEvents([])
+      return
+    }
+
+    setLoadStatus('loading')
+    setLoadError('')
+    axios
+      .get(`${API_BASE_URL}/api/events/approved`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        setEvents(res.data?.events ?? [])
+      })
+      .catch((e) => {
+        setLoadError(
+          e?.response?.data?.message ||
+            'Unable to load events from server. Showing sample data.',
+        )
+        setEvents([])
+      })
+      .finally(() => setLoadStatus('idle'))
+  }, [API_BASE_URL])
+
+  const normalizedEvents = useMemo(() => {
+    const source = events?.length ? events : MOCK_EVENTS
+    return source.map((e) => {
+      if (e.title && e.category) return e
+      const category = e.type === 'work' ? 'workshop' : e.type
+      const dateLabel = new Date(e.date).toLocaleDateString(undefined, {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      })
+      return {
+        id: e.id,
+        title: e.name,
+        description: e.description ?? '',
+        dateLabel,
+        time: e.time,
+        location: e.place,
+        category,
+        registeredCount: 0,
+        capacity: e.totalSeats,
+        image: e.thumbnailUrl || 'https://picsum.photos/seed/event/800/400',
+      }
+    })
+  }, [events])
 
   const filteredEvents =
     filter === 'all'
-      ? MOCK_EVENTS
-      : MOCK_EVENTS.filter((event) => event.category === filter)
+      ? normalizedEvents
+      : normalizedEvents.filter((event) => event.category === filter)
 
   return (
     <section className="space-y-6">
@@ -652,6 +711,16 @@ function StudentEventsSection() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+          {loadError}
+        </div>
+      )}
+
+      {loadStatus === 'loading' && !events?.length && (
+        <p className="text-sm text-slate-600">Loading events…</p>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredEvents.map((event, index) => (
           <motion.article
@@ -667,6 +736,7 @@ function StudentEventsSection() {
                 alt={event.title}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 referrerPolicy="no-referrer"
+                loading="lazy"
               />
               <div className="absolute top-3 left-3">
                 <span className="px-3 py-1 bg-white/90 backdrop-blur-sm text-indigo-600 text-[10px] font-bold uppercase tracking-widest rounded-full border border-white/40">

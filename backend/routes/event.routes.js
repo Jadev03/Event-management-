@@ -5,6 +5,7 @@ const {
   updateMyEvent,
   listPendingEvents,
   listAllEventsForFaculty,
+  listApprovedEvents,
   approveEvent,
   rejectEvent,
   checkInQr,
@@ -17,6 +18,7 @@ const router = express.Router();
 router.post('/', createEvent);
 router.get('/overview', getOrganizerOverview);
 router.get('/mine', listMyEvents);
+router.get('/approved', listApprovedEvents);
 router.put('/:id', updateMyEvent);
 router.post('/:id/checkin', checkInQr);
 

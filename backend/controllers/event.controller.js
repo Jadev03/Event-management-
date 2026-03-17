@@ -353,6 +353,33 @@ const listAllEventsForFaculty = async (req, res) => {
   }
 };
 
+const listApprovedEvents = async (req, res) => {
+  try {
+    const items = await Event.find({ status: 'approved' })
+      .sort({ date: 1, time: 1, createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      events: items.map((e) => ({
+        id: e._id.toString(),
+        name: e.name,
+        description: e.description,
+        type: e.type,
+        date: e.date,
+        time: e.time,
+        place: e.place,
+        totalSeats: e.totalSeats,
+        thumbnailUrl: e.thumbnailUrl,
+        status: e.status,
+        createdAt: e.createdAt,
+      })),
+    });
+  } catch (error) {
+    logger.error('Error listing approved events', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 const approveEvent = async (req, res) => {
   try {
     const deny = requireFacultyCoordinator(req, res);
@@ -526,6 +553,7 @@ module.exports = {
   listMyEvents,
   listPendingEvents,
   listAllEventsForFaculty,
+  listApprovedEvents,
   updateMyEvent,
   approveEvent,
   rejectEvent,
