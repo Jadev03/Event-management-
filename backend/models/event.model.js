@@ -15,6 +15,11 @@ const eventSchema = new mongoose.Schema(
     thumbnailUrl: { type: String, default: '', trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     status: { type: String, enum: EVENT_STATUSES, default: 'pending' },
+    decision: {
+      decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      decidedAt: { type: Date, default: null },
+      rejectionReason: { type: String, default: '', trim: true },
+    },
   },
   { timestamps: true }
 );

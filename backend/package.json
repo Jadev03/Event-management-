@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "seed:users": "node seedUsers.js"
+    "seed:users": "node seeds/seedUsers.js",
+    "seed:events": "node seeds/seedEvents.js",
+    "seed:faculty": "node seeds/seedFacultyData.js",
+    "seed:all": "node seeds/seedAll.js"
   },
   "keywords": [],
   "author": "",

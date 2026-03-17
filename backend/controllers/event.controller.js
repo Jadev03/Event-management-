@@ -10,6 +10,16 @@ const requireOrganizer = (req, res) => {
   return null;
 };
 
+const requireFacultyCoordinator = (req, res) => {
+  const role = req.user?.role;
+  if (role !== 'facultyCoordinator') {
+    return res
+      .status(403)
+      .json({ message: 'Faculty coordinator access required' });
+  }
+  return null;
+};
+
 const createEvent = async (req, res) => {
   try {
     const deny = requireOrganizer(req, res);
@@ -258,6 +268,185 @@ const checkInQr = async (req, res) => {
   }
 };
 
+const listPendingEvents = async (req, res) => {
+  try {
+    const deny = requireFacultyCoordinator(req, res);
+    if (deny) return;
+
+    const items = await Event.find({ status: 'pending' })
+      .sort({ createdAt: -1 })
+      .populate('createdBy', 'name email role')
+      .lean();
+
+    return res.status(200).json({
+      events: items.map((e) => ({
+        id: e._id.toString(),
+        name: e.name,
+        description: e.description,
+        type: e.type,
+        date: e.date,
+        time: e.time,
+        place: e.place,
+        totalSeats: e.totalSeats,
+        thumbnailUrl: e.thumbnailUrl,
+        status: e.status,
+        createdAt: e.createdAt,
+        createdBy: e.createdBy
+          ? {
+              id: e.createdBy._id?.toString?.() || undefined,
+              name: e.createdBy.name,
+              email: e.createdBy.email,
+              role: e.createdBy.role,
+            }
+          : null,
+      })),
+    });
+  } catch (error) {
+    logger.error('Error listing pending events', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const listAllEventsForFaculty = async (req, res) => {
+  try {
+    const deny = requireFacultyCoordinator(req, res);
+    if (deny) return;
+
+    const items = await Event.find({})
+      .sort({ createdAt: -1 })
+      .populate('createdBy', 'name email role')
+      .lean();
+
+    return res.status(200).json({
+      events: items.map((e) => ({
+        id: e._id.toString(),
+        name: e.name,
+        description: e.description,
+        type: e.type,
+        date: e.date,
+        time: e.time,
+        place: e.place,
+        totalSeats: e.totalSeats,
+        thumbnailUrl: e.thumbnailUrl,
+        status: e.status,
+        createdAt: e.createdAt,
+        createdBy: e.createdBy
+          ? {
+              id: e.createdBy._id?.toString?.() || undefined,
+              name: e.createdBy.name,
+              email: e.createdBy.email,
+              role: e.createdBy.role,
+            }
+          : null,
+        decision: e.decision
+          ? {
+              decidedBy: e.decision.decidedBy?.toString?.() || null,
+              decidedAt: e.decision.decidedAt || null,
+              rejectionReason: e.decision.rejectionReason || '',
+            }
+          : null,
+      })),
+    });
+  } catch (error) {
+    logger.error('Error listing faculty events', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const approveEvent = async (req, res) => {
+  try {
+    const deny = requireFacultyCoordinator(req, res);
+    if (deny) return;
+
+    const eventId = req.params?.id;
+    if (!eventId) return res.status(400).json({ message: 'Event id is required' });
+
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    if (event.status !== 'pending') {
+      return res.status(409).json({
+        message: `Only pending events can be approved. Current status: ${event.status}`,
+      });
+    }
+
+    event.status = 'approved';
+    event.decision = {
+      decidedBy: req.user.id,
+      decidedAt: new Date(),
+      rejectionReason: '',
+    };
+
+    await event.save();
+
+    return res.status(200).json({
+      message: 'Event approved',
+      event: {
+        id: event._id.toString(),
+        name: event.name,
+        status: event.status,
+        decision: {
+          decidedBy: event.decision?.decidedBy?.toString?.() || null,
+          decidedAt: event.decision?.decidedAt || null,
+          rejectionReason: event.decision?.rejectionReason || '',
+        },
+        updatedAt: event.updatedAt,
+      },
+    });
+  } catch (error) {
+    logger.error('Error approving event', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const rejectEvent = async (req, res) => {
+  try {
+    const deny = requireFacultyCoordinator(req, res);
+    if (deny) return;
+
+    const eventId = req.params?.id;
+    if (!eventId) return res.status(400).json({ message: 'Event id is required' });
+
+    const reason = String(req.body?.reason || '').trim();
+
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    if (event.status !== 'pending') {
+      return res.status(409).json({
+        message: `Only pending events can be rejected. Current status: ${event.status}`,
+      });
+    }
+
+    event.status = 'rejected';
+    event.decision = {
+      decidedBy: req.user.id,
+      decidedAt: new Date(),
+      rejectionReason: reason,
+    };
+
+    await event.save();
+
+    return res.status(200).json({
+      message: 'Event rejected',
+      event: {
+        id: event._id.toString(),
+        name: event.name,
+        status: event.status,
+        decision: {
+          decidedBy: event.decision?.decidedBy?.toString?.() || null,
+          decidedAt: event.decision?.decidedAt || null,
+          rejectionReason: event.decision?.rejectionReason || '',
+        },
+        updatedAt: event.updatedAt,
+      },
+    });
+  } catch (error) {
+    logger.error('Error rejecting event', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 const getOrganizerOverview = async (req, res) => {
   try {
     const deny = requireOrganizer(req, res);
@@ -335,7 +524,11 @@ const getOrganizerOverview = async (req, res) => {
 module.exports = {
   createEvent,
   listMyEvents,
+  listPendingEvents,
+  listAllEventsForFaculty,
   updateMyEvent,
+  approveEvent,
+  rejectEvent,
   checkInQr,
   getOrganizerOverview,
 };

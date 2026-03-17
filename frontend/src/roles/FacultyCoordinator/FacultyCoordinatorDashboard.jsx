@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
 import {
   Users,
   Calendar,
@@ -14,10 +15,6 @@ import {
   Search,
   LogOut,
   Bell,
-  ScanLine,
-  UserCheck,
-  Mic2,
-  Eye,
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import {
@@ -30,31 +27,12 @@ import {
   Line,
 } from 'recharts'
 
-const participationData = [
-  { name: 'Jan', participation: 20 },
-  { name: 'Feb', participation: 35 },
-  { name: 'Mar', participation: 45 },
-  { name: 'Apr', participation: 30 },
-  { name: 'May', participation: 55 },
-  { name: 'Jun', participation: 40 },
-]
-
-const MOCK_MY_PARTICIPATION = [
-  { id: 'e3', title: 'Research Symposium', dateLabel: 'Jun 15, 2026', role: 'speaker' },
-  { id: 'e1', title: 'AI Workshop 2026', dateLabel: 'May 20, 2026', role: 'supervisor' },
-  { id: 'e4', title: 'Web Dev Bootcamp: React + Vite', dateLabel: 'May 28, 2026', role: 'attendee' },
-]
-
-const MOCK_TARGETED_NOTIFICATIONS = [
-  { id: 'n1', title: 'CS Dept: AI Workshop reminder', message: 'AI Workshop 2026 starts May 20. You are listed as supervisor.', dateLabel: 'Today', read: false },
-  { id: 'n2', title: 'Academic: Research Symposium', message: 'You are speaking at Research Symposium on Jun 15.', dateLabel: 'Yesterday', read: true },
-  { id: 'n3', title: 'Your department events this week', message: '2 academic events in IT Faculty this week.', dateLabel: '2 days ago', read: true },
-]
-
-const MOCK_ATTENDANCE = [
-  { eventId: 'e1', eventTitle: 'AI Workshop 2026', dateLabel: 'May 20, 2026', total: 45, validated: 42 },
-  { eventId: 'e3', eventTitle: 'Research Symposium', dateLabel: 'Jun 15, 2026', total: 32, validated: 0 },
-]
+const formatDateLabel = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })
+}
 
 const MOCK_EVENTS = [
   {
@@ -67,6 +45,8 @@ const MOCK_EVENTS = [
     category: 'workshop',
     registeredCount: 45,
     capacity: 100,
+    image:
+      'https://images.unsplash.com/photo-1526378722445-7b3f2d79b3be?auto=format&fit=crop&w=1200&q=60',
   },
   {
     id: 'e3',
@@ -78,6 +58,8 @@ const MOCK_EVENTS = [
     category: 'academic',
     registeredCount: 32,
     capacity: 80,
+    image:
+      'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=60',
   },
   {
     id: 'e4',
@@ -89,6 +71,8 @@ const MOCK_EVENTS = [
     category: 'workshop',
     registeredCount: 76,
     capacity: 120,
+    image:
+      'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=60',
   },
   {
     id: 'e7',
@@ -100,13 +84,14 @@ const MOCK_EVENTS = [
     category: 'academic',
     registeredCount: 38,
     capacity: 60,
+    image:
+      'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=1200&q=60',
   },
 ]
 
 const sidebarItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'my-participation', label: 'My Participation', icon: UserCheck },
-  { id: 'validate-attendance', label: 'Validate Attendance', icon: ScanLine },
+  { id: 'approvals', label: 'Event Approvals', icon: Clock },
   { id: 'events', label: 'Browse Events', icon: Calendar },
 ]
 
@@ -115,17 +100,166 @@ function cn(...inputs) {
 }
 
 export function FacultyCoordinatorDashboard({ user, onLogout }) {
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const notifications = MOCK_TARGETED_NOTIFICATIONS
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const [notifications, setNotifications] = useState([])
+  const [overview, setOverview] = useState({
+    stats: {
+      totalEvents: 0,
+      pendingApprovals: 0,
+      approvedEvents: 0,
+      rejectedEvents: 0,
+      completedEvents: 0,
+    },
+    trends: [],
+  })
+  const unreadCount = (notifications || []).filter((n) => !n.read).length
+
+  const [pendingEvents, setPendingEvents] = useState([])
+  const [pendingError, setPendingError] = useState('')
+  const [pendingStatus, setPendingStatus] = useState('idle') // idle | loading
+  const [actionBusyById, setActionBusyById] = useState({})
+  const [rejectModal, setRejectModal] = useState({ open: false, event: null, reason: '' })
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) return
+
+    axios
+      .get(`${API_BASE_URL}/api/faculty/overview`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        if (res.data?.stats) setOverview(res.data)
+      })
+      .catch(() => {
+        // keep defaults
+      })
+
+    axios
+      .get(`${API_BASE_URL}/api/faculty/notifications`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        const items = res.data?.notifications ?? []
+        setNotifications(
+          items.map((n) => ({
+            ...n,
+            dateLabel: formatDateLabel(n.createdAt),
+          })),
+        )
+      })
+      .catch(() => {
+        setNotifications([])
+      })
+  }, [API_BASE_URL])
+
+  const loadPending = async () => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setPendingError('You are not logged in.')
+      setPendingEvents([])
+      return
+    }
+
+    setPendingStatus('loading')
+    setPendingError('')
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/events/pending`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      setPendingEvents(res.data?.events ?? [])
+    } catch (e) {
+      setPendingError(
+        e?.response?.data?.message ||
+          'Unable to load pending events. Please try again.',
+      )
+      setPendingEvents([])
+    } finally {
+      setPendingStatus('idle')
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab !== 'approvals') return
+    loadPending()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  const approve = async (eventId) => {
+    if (!eventId) return
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setPendingError('You are not logged in.')
+      return
+    }
+
+    setActionBusyById((prev) => ({ ...prev, [eventId]: true }))
+    setPendingError('')
+    try {
+      await axios.post(
+        `${API_BASE_URL}/api/events/${eventId}/approve`,
+        {},
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      setPendingEvents((prev) => prev.filter((e) => e.id !== eventId))
+    } catch (e) {
+      setPendingError(
+        e?.response?.data?.message || 'Failed to approve event.',
+      )
+    } finally {
+      setActionBusyById((prev) => ({ ...prev, [eventId]: false }))
+    }
+  }
+
+  const openReject = (event) => {
+    setPendingError('')
+    setRejectModal({ open: true, event, reason: '' })
+  }
+
+  const closeReject = () => {
+    setRejectModal({ open: false, event: null, reason: '' })
+  }
+
+  const reject = async () => {
+    const ev = rejectModal.event
+    if (!ev?.id) return
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setPendingError('You are not logged in.')
+      return
+    }
+
+    const eventId = ev.id
+    setActionBusyById((prev) => ({ ...prev, [eventId]: true }))
+    setPendingError('')
+    try {
+      await axios.post(
+        `${API_BASE_URL}/api/events/${eventId}/reject`,
+        { reason: rejectModal.reason },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      setPendingEvents((prev) => prev.filter((e) => e.id !== eventId))
+      closeReject()
+    } catch (e) {
+      setPendingError(e?.response?.data?.message || 'Failed to reject event.')
+    } finally {
+      setActionBusyById((prev) => ({ ...prev, [eventId]: false }))
+    }
+  }
+
+  const pendingCount = pendingEvents?.length ?? 0
+  const pendingList = useMemo(() => pendingEvents || [], [pendingEvents])
 
   const stats = [
-    { label: 'Academic Events', value: '14', icon: BookOpen, color: 'bg-indigo-50 text-indigo-600' },
-    { label: 'Total Hours', value: '42', icon: Clock, color: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Students Mentored', value: '128', icon: Users, color: 'bg-orange-50 text-orange-600' },
-    { label: 'Certifications', value: '5', icon: Award, color: 'bg-purple-50 text-purple-600' },
+    { label: 'Total Events', value: String(overview.stats.totalEvents ?? 0), icon: Calendar, color: 'bg-indigo-50 text-indigo-600' },
+    { label: 'Pending Approvals', value: String(overview.stats.pendingApprovals ?? 0), icon: Clock, color: 'bg-orange-50 text-orange-600' },
+    { label: 'Approved Events', value: String(overview.stats.approvedEvents ?? 0), icon: BookOpen, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Rejected Events', value: String(overview.stats.rejectedEvents ?? 0), icon: Award, color: 'bg-red-50 text-red-600' },
   ]
 
   return (
@@ -321,12 +455,12 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                   </div>
                   <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={participationData}>
+                      <LineChart data={overview.trends || []}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
                         <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
-                        <Line type="monotone" dataKey="participation" stroke="#4F46E5" strokeWidth={3} dot={{ r: 6, fill: '#4F46E5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                        <Line type="monotone" dataKey="value" stroke="#4F46E5" strokeWidth={3} dot={{ r: 6, fill: '#4F46E5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -374,131 +508,373 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
             </div>
           )}
 
-          {activeTab === 'my-participation' && (
+          {activeTab === 'approvals' && (
             <div className="space-y-6">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                  My Participation
-                </h1>
-                <p className="text-slate-500 mt-1">
-                  Events where you participate as attendee, speaker, or supervisor.
-                </p>
-              </div>
-              <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
-                <div className="space-y-4">
-                  {MOCK_MY_PARTICIPATION.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-4 rounded-2xl border border-black/5 hover:border-indigo-100 hover:bg-indigo-50/30 transition-colors"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600">
-                          {item.role === 'speaker' && <Mic2 size={22} />}
-                          {item.role === 'supervisor' && <UserCheck size={22} />}
-                          {item.role === 'attendee' && <Eye size={22} />}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900">{item.title}</h3>
-                          <p className="text-sm text-slate-500">{item.dateLabel}</p>
-                          <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-md capitalize">
-                            {item.role}
-                          </span>
-                        </div>
-                      </div>
-                      <ChevronRight size={20} className="text-slate-400" />
-                    </div>
-                  ))}
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                    Event Approvals
+                  </h1>
+                  <p className="text-slate-500 mt-1">
+                    Review pending events and approve or reject them.
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={loadPending}
+                  className="px-4 py-2.5 rounded-2xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm font-bold"
+                  disabled={pendingStatus === 'loading'}
+                >
+                  {pendingStatus === 'loading' ? 'Refreshing…' : 'Refresh'}
+                </button>
               </div>
-            </div>
-          )}
 
-          {activeTab === 'validate-attendance' && (
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                  Validate Attendance
-                </h1>
-                <p className="text-slate-500 mt-1">
-                  Reliable attendance validation for students at academic-related events.
-                </p>
-              </div>
               <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-900 mb-6">Academic events – attendance</h2>
-                <div className="space-y-4">
-                  {MOCK_ATTENDANCE.map((a) => (
-                    <div
-                      key={a.eventId}
-                      className="flex items-center justify-between p-4 rounded-2xl border border-black/5 hover:border-indigo-100 transition-colors"
-                    >
-                      <div>
-                        <h3 className="font-bold text-slate-900">{a.eventTitle}</h3>
-                        <p className="text-sm text-slate-500">{a.dateLabel}</p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          {a.validated} of {a.total} students validated
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
-                        >
-                          <ScanLine size={18} />
-                          {a.validated > 0 ? 'View / Scan more' : 'Scan attendance'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Pending approvals
+                  </h2>
+                  <span className="text-sm font-semibold text-slate-500">
+                    {pendingCount} pending
+                  </span>
                 </div>
-                <p className="text-sm text-slate-500 mt-6">
-                  Use the scanner to verify student QR codes at event entry for reliable attendance records.
-                </p>
+
+                {pendingError && (
+                  <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {pendingError}
+                  </div>
+                )}
+
+                {pendingStatus === 'loading' && pendingCount === 0 && (
+                  <p className="text-sm text-slate-600">Loading…</p>
+                )}
+
+                {pendingStatus !== 'loading' && pendingCount === 0 && !pendingError && (
+                  <p className="text-sm text-slate-600">
+                    No pending events right now.
+                  </p>
+                )}
+
+                <div className="space-y-4">
+                  {pendingList.map((event) => {
+                    const busy = Boolean(actionBusyById[event.id])
+                    return (
+                      <div
+                        key={event.id}
+                        className="p-4 rounded-2xl border border-black/5 hover:border-indigo-100 hover:bg-indigo-50/30 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold uppercase rounded-md">
+                                {event.type}
+                              </span>
+                              <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-[10px] font-bold uppercase rounded-md border border-orange-100">
+                                pending
+                              </span>
+                              {event.createdBy?.name && (
+                                <span className="text-xs text-slate-400">
+                                  Submitted by {event.createdBy.name}
+                                </span>
+                              )}
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 mt-2 truncate">
+                              {event.name}
+                            </h3>
+                            {event.thumbnailUrl && (
+                              <img
+                                src={event.thumbnailUrl}
+                                alt={`${event.name} thumbnail`}
+                                className="mt-3 w-full max-w-[520px] h-44 rounded-2xl object-cover border border-black/5 bg-slate-50"
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                              />
+                            )}
+                            {event.description && (
+                              <p className="text-sm text-slate-600 mt-1">
+                                {event.description}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-4 mt-3 text-sm text-slate-500 flex-wrap">
+                              <span className="flex items-center gap-1">
+                                <MapPin size={14} /> {event.place}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Users size={14} /> {event.totalSeats} seats
+                              </span>
+                              <span className="text-xs text-slate-400">
+                                {new Date(event.date).toLocaleDateString(undefined, {
+                                  month: 'short',
+                                  day: '2-digit',
+                                  year: 'numeric',
+                                })}{' '}
+                                • {event.time}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => approve(event.id)}
+                              disabled={busy}
+                              className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openReject(event)}
+                              disabled={busy}
+                              className="px-4 py-2 rounded-xl border border-red-200 bg-white text-red-600 text-sm font-bold hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
+
+              {rejectModal.open && (
+                <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                  <div className="bg-white rounded-3xl shadow-2xl border border-black/5 w-full max-w-xl p-6 md:p-8 relative">
+                    <button
+                      type="button"
+                      onClick={closeReject}
+                      className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 text-slate-500"
+                      aria-label="Close reject dialog"
+                    >
+                      <X size={18} />
+                    </button>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-2">
+                      Reject event
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                      {rejectModal.event?.name}
+                    </p>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-600">
+                        Reason (optional)
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={rejectModal.reason}
+                        onChange={(e) =>
+                          setRejectModal((prev) => ({
+                            ...prev,
+                            reason: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
+                        placeholder="Explain why this event is rejected…"
+                      />
+                    </div>
+                    <div className="mt-6 flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={closeReject}
+                        className="px-4 py-2.5 rounded-2xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={reject}
+                        className="px-5 py-2.5 rounded-2xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                        disabled={Boolean(actionBusyById[rejectModal.event?.id])}
+                      >
+                        {actionBusyById[rejectModal.event?.id] ? 'Rejecting…' : 'Reject event'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'events' && (
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                  Browse Events
-                </h1>
-                <p className="text-slate-500 mt-1">
-                  View and manage academic and workshop events.
-                </p>
-              </div>
-              <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-900 mb-6">All Academic & Workshop Events</h2>
-                <div className="space-y-6">
-                  {MOCK_EVENTS.map((event) => (
-                    <div
-                      key={event.id}
-                      className="p-4 rounded-2xl border border-black/5 hover:border-indigo-100 hover:bg-indigo-50/30 transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs font-bold uppercase rounded-md">
-                          {event.category}
-                        </span>
-                        <span className="text-xs text-slate-400">{event.dateLabel}</span>
-                      </div>
-                      <h3 className="text-lg font-bold text-slate-900">{event.title}</h3>
-                      <p className="text-sm text-slate-600 mt-1">{event.description}</p>
-                      <div className="flex items-center gap-4 mt-3 text-sm text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <MapPin size={14} /> {event.location}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Users size={14} /> {event.registeredCount} / {event.capacity} registered
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <FacultyEventsSection />
           )}
         </main>
       </div>
     </div>
+  )
+}
+
+function FacultyEventsSection() {
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+
+  const [filter, setFilter] = useState('all')
+  const [events, setEvents] = useState([])
+  const [loadStatus, setLoadStatus] = useState('idle') // idle | loading
+  const [loadError, setLoadError] = useState('')
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setLoadError('You are not logged in.')
+      setEvents([])
+      return
+    }
+
+    setLoadStatus('loading')
+    setLoadError('')
+    axios
+      .get(`${API_BASE_URL}/api/events/faculty/all`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        const items = res.data?.events ?? []
+        setEvents(items)
+      })
+      .catch((e) => {
+        setLoadError(
+          e?.response?.data?.message ||
+            'Unable to load events from server. Showing sample data.',
+        )
+        setEvents([])
+      })
+      .finally(() => setLoadStatus('idle'))
+  }, [API_BASE_URL])
+
+  const normalizedEvents = useMemo(() => {
+    const source = events?.length ? events : MOCK_EVENTS
+    return source.map((e) => {
+      // If already in mock format, keep as-is.
+      if (e.title && e.category) return e
+
+      const type = e.type === 'work' ? 'workshop' : e.type
+      const dateLabel = new Date(e.date).toLocaleDateString(undefined, {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      })
+      return {
+        id: e.id,
+        title: e.name,
+        description: e.description ?? '',
+        dateLabel,
+        time: e.time,
+        location: e.place,
+        category: type,
+        registeredCount: 0,
+        capacity: e.totalSeats,
+        image: e.thumbnailUrl || '',
+        status: e.status,
+      }
+    })
+  }, [events])
+
+  const filteredEvents =
+    filter === 'all'
+      ? normalizedEvents
+      : normalizedEvents.filter((event) => event.category === filter)
+
+  return (
+    <section className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Discover events</h2>
+          <p className="text-sm text-slate-500">
+            Explore upcoming university events and find something that matches your
+            interests.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-black/5 shadow-sm">
+          <span className="text-xs font-semibold text-slate-500">Filter:</span>
+          {['all', 'academic', 'workshop', 'sports', 'social'].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setFilter(cat)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
+                filter === cat
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+          {loadError}
+        </div>
+      )}
+
+      {loadStatus === 'loading' && !events?.length && (
+        <p className="text-sm text-slate-600">Loading events…</p>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredEvents.map((event, index) => (
+          <motion.article
+            key={event.id}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05 }}
+            className="bg-white rounded-[24px] overflow-hidden border border-black/5 shadow-sm hover:shadow-lg hover:shadow-indigo-50 transition-all group"
+          >
+            <div className="relative h-40 overflow-hidden">
+              {event.image ? (
+                <img
+                  src={event.image}
+                  alt={event.title}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full h-full bg-slate-100" />
+              )}
+              <div className="absolute top-3 left-3">
+                <span className="px-3 py-1 bg-white/90 backdrop-blur-sm text-indigo-600 text-[10px] font-bold uppercase tracking-widest rounded-full border border-white/40">
+                  {event.category}
+                </span>
+              </div>
+            </div>
+            <div className="p-6">
+              <h3 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">
+                {event.title}
+              </h3>
+              <p className="text-sm text-slate-500 mt-2 line-clamp-2">
+                {event.description}
+              </p>
+              <div className="mt-4 space-y-2 text-xs text-slate-600">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Calendar size={14} className="text-slate-400" /> {event.dateLabel}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Clock size={14} className="text-slate-400" /> {event.time}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <MapPin size={14} className="text-slate-400" /> {event.location}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Users size={14} className="text-slate-400" /> {event.registeredCount}/
+                    {event.capacity}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="mt-4 w-full py-2.5 rounded-2xl border border-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-50 transition-colors"
+              >
+                View details
+              </button>
+            </div>
+          </motion.article>
+        ))}
+      </div>
+    </section>
   )
 }

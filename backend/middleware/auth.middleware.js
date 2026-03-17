@@ -182,6 +182,20 @@ const requireAdmin = (req, res, next) => {
   return next();
 };
 
+const requireFacultyCoordinator = (req, res, next) => {
+  const user = req.user;
+
+  if (!user || user.role !== 'facultyCoordinator') {
+    logger.warn('Non-facultyCoordinator attempted to access coordinator route', {
+      userId: user?.id,
+      role: user?.role,
+    });
+    return res.status(403).json({ message: 'Faculty coordinator access required' });
+  }
+
+  return next();
+};
+
 const logout = (req, res) => {
   try {
     const authHeader = req.headers.authorization || '';
@@ -207,6 +221,7 @@ module.exports = {
   issueJwt,
   authenticate,
   requireAdmin,
+  requireFacultyCoordinator,
   refreshAccessToken,
   logout,
 };
