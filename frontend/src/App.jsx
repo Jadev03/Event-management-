@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import axios from 'axios'
 
 import { Login } from './components/Login.jsx'
@@ -37,6 +37,23 @@ const AppContent = () => {
   const [loginAttempts, setLoginAttempts] = useState(DUMMY_FAILED_ATTEMPTS)
   const [lockedEmails, setLockedEmails] = useState({})
   const [deactivatedEmails, setDeactivatedEmails] = useState({})
+
+  // On first load, try to restore user from localStorage so refresh keeps user logged in.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('currentUser')
+      if (!stored) return
+      const parsed = JSON.parse(stored)
+      if (parsed && parsed.email && parsed.role && parsed.username) {
+        setCurrentUser(parsed)
+      } else {
+        localStorage.removeItem('currentUser')
+      }
+    } catch {
+      // If corrupted, clear it.
+      localStorage.removeItem('currentUser')
+    }
+  }, [])
 
   const recordLoginAttempt = (email, success) => {
     const normalizedEmail = email.trim().toLowerCase()
@@ -180,6 +197,11 @@ const AppContent = () => {
 
       recordLoginAttempt(trimmedEmail, true)
       setCurrentUser(mappedUser)
+      try {
+        localStorage.setItem('currentUser', JSON.stringify(mappedUser))
+      } catch {
+        // non-fatal
+      }
       setError('')
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -214,6 +236,7 @@ const AppContent = () => {
     } finally {
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')
+      localStorage.removeItem('currentUser')
       setCurrentUser(null)
       setError('')
     }

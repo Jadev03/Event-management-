@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { logger } = require('../utils/logger');
+const { User } = require('../models/user.model');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
@@ -134,23 +135,33 @@ const refreshAccessToken = (req, res) => {
       return res.status(400).json({ message: 'Invalid refresh token' });
     }
 
-    const payload = {
-      sub: decoded.sub,
-      // We no longer have email/role here without extra lookup.
-      // For now, just include the subject; frontends that need more info
-      // should cache it from login or call a /me endpoint.
-    };
+    return User.findById(decoded.sub)
+      .then((user) => {
+        if (!user) {
+          return res.status(401).json({ message: 'User not found' });
+        }
 
-    const accessToken = jwt.sign(payload, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN,
-    });
+        const payload = {
+          sub: user._id.toString(),
+          email: user.email,
+          role: user.role,
+        };
 
-    logger.info('Access token refreshed', { sub: decoded.sub });
+        const accessToken = jwt.sign(payload, JWT_SECRET, {
+          expiresIn: JWT_EXPIRES_IN,
+        });
 
-    return res.status(200).json({
-      message: 'Access token refreshed',
-      token: accessToken,
-    });
+        logger.info('Access token refreshed', { sub: decoded.sub });
+
+        return res.status(200).json({
+          message: 'Access token refreshed',
+          token: accessToken,
+        });
+      })
+      .catch((err) => {
+        logger.warn('Refresh user lookup failed', { message: err.message });
+        return res.status(401).json({ message: 'Invalid refresh token' });
+      });
   } catch (error) {
     logger.warn('Refresh token verification failed', { message: error.message });
     return res.status(401).json({ message: 'Invalid or expired refresh token' });

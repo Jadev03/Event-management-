@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
 import {
   Calendar,
   CheckCircle2,
@@ -8,6 +9,7 @@ import {
   Plus,
   Search,
   Users,
+  X,
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import {
@@ -78,8 +80,144 @@ const MOCK_EVENTS = [
 ]
 
 export function OrganizerDashboard({ user, onLogout }) {
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [events, setEvents] = useState([])
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    type: 'academic',
+    date: '',
+    time: '',
+    place: '',
+    seats: '',
+    thumbnail: '',
+  })
+  const [createError, setCreateError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setEvents(MOCK_EVENTS)
+      return
+    }
+
+    axios
+      .get(`${API_BASE_URL}/api/events/mine`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        const serverEvents = res.data?.events ?? []
+        setEvents(serverEvents)
+      })
+      .catch(() => {
+        // Fall back to local mocks if backend is unavailable
+        setEvents(MOCK_EVENTS)
+      })
+  }, [API_BASE_URL])
+
+  const handleOpenCreate = () => {
+    setCreateError('')
+    setIsCreateOpen(true)
+  }
+
+  const handleCloseCreate = () => {
+    setCreateError('')
+    setIsCreateOpen(false)
+  }
+
+  const handleFormChange = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleSubmitCreate = (e) => {
+    e.preventDefault()
+    setCreateError('')
+    if (
+      !form.name.trim() ||
+      !form.date ||
+      !form.time ||
+      !form.place.trim() ||
+      !form.seats
+    ) {
+      setCreateError(
+        'Please fill in event name, date, time, place and total seats.',
+      )
+      return
+    }
+
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setCreateError('You are not logged in.')
+      return
+    }
+
+    setIsSaving(true)
+    axios
+      .post(
+        `${API_BASE_URL}/api/events`,
+        {
+          name: form.name.trim(),
+          description: form.description.trim(),
+          type: form.type,
+          date: form.date,
+          time: form.time,
+          place: form.place.trim(),
+          totalSeats: Number.parseInt(form.seats, 10),
+          thumbnailUrl: form.thumbnail.trim(),
+        },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      .then((res) => {
+        const created = res.data?.event
+        if (created) {
+          setEvents((prev) => [created, ...prev])
+        }
+        setForm({
+          name: '',
+          description: '',
+          type: 'academic',
+          date: '',
+          time: '',
+          place: '',
+          seats: '',
+          thumbnail: '',
+        })
+        setIsCreateOpen(false)
+      })
+      .catch((err) => {
+        setCreateError(
+          err?.response?.data?.message ||
+            'Unable to create event. Please try again.',
+        )
+      })
+      .finally(() => setIsSaving(false))
+  }
+
+  const allEvents = useMemo(
+    () =>
+      (events?.length ? events : MOCK_EVENTS).map((e) => {
+        if (e.title) return e
+        return {
+          id: e.id,
+          title: e.name,
+          date: new Date(e.date).toLocaleDateString(undefined, {
+            month: 'short',
+            day: '2-digit',
+            year: 'numeric',
+          }),
+          registeredCount: 0,
+          capacity: e.totalSeats,
+          status: e.status ?? 'pending',
+        }
+      }),
+    [events],
+  )
 
   return (
     <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
@@ -176,7 +314,10 @@ export function OrganizerDashboard({ user, onLogout }) {
           </div>
 
           <div className="flex items-center gap-5">
-            <button className="hidden sm:inline-flex bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-bold items-center gap-2 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">
+            <button
+              className="hidden sm:inline-flex bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-bold items-center gap-2 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
+              onClick={handleOpenCreate}
+            >
               <Plus size={18} /> Create event
             </button>
             <div className="flex items-center gap-3 pl-5 border-l border-black/5">
@@ -195,6 +336,169 @@ export function OrganizerDashboard({ user, onLogout }) {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
+        {isCreateOpen && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl shadow-2xl border border-black/5 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 relative">
+              <button
+                type="button"
+                onClick={handleCloseCreate}
+                className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 text-slate-500"
+                aria-label="Close create event form"
+              >
+                <X size={18} />
+              </button>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">
+                Create new event
+              </h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Add event details. This form is local-only for now and will add
+                to your &quot;My Events&quot; list.
+              </p>
+              <form
+                onSubmit={handleSubmitCreate}
+                className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6"
+              >
+                {createError && (
+                  <div className="md:col-span-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {createError}
+                  </div>
+                )}
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Event name
+                  </label>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => handleFormChange('name', e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    placeholder="e.g. AI Workshop 2026"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Event type
+                  </label>
+                  <select
+                    value={form.type}
+                    onChange={(e) => handleFormChange('type', e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  >
+                    <option value="academic">Academic</option>
+                    <option value="workshop">Work</option>
+                    <option value="sports">Sports</option>
+                    <option value="social">Social</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => handleFormChange('date', e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Time
+                  </label>
+                  <input
+                    type="time"
+                    value={form.time}
+                    onChange={(e) => handleFormChange('time', e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Place
+                  </label>
+                  <input
+                    type="text"
+                    value={form.place}
+                    onChange={(e) => handleFormChange('place', e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    placeholder="e.g. Innovation Lab"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Total number of seats
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.seats}
+                    onChange={(e) => handleFormChange('seats', e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    placeholder="e.g. 150"
+                  />
+                </div>
+
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Event description
+                  </label>
+                  <textarea
+                    value={form.description}
+                    onChange={(e) =>
+                      handleFormChange('description', e.target.value)
+                    }
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
+                    placeholder="Brief description of the event..."
+                  />
+                </div>
+
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Thumbnail image URL
+                  </label>
+                  <input
+                    type="url"
+                    value={form.thumbnail}
+                    onChange={(e) =>
+                      handleFormChange('thumbnail', e.target.value)
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    placeholder="https://example.com/image.jpg"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    For now this is stored only in the browser and used for
+                    display.
+                  </p>
+                </div>
+
+                <div className="md:col-span-2 flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleCloseCreate}
+                    className="px-4 py-2.5 rounded-2xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-2xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 shadow-md shadow-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? 'Saving…' : 'Save event'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
           {/* Page header text based on tab */}
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -219,7 +523,10 @@ export function OrganizerDashboard({ user, onLogout }) {
                 </>
               )}
             </div>
-            <button className="sm:hidden bg-indigo-600 text-white px-4 py-2.5 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">
+            <button
+              className="sm:hidden bg-indigo-600 text-white px-4 py-2.5 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
+              onClick={handleOpenCreate}
+            >
               <Plus size={18} /> Create event
             </button>
           </div>
@@ -423,7 +730,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/5">
-                    {MOCK_EVENTS.map((event) => (
+                    {allEvents.map((event) => (
                       <tr
                         key={event.id}
                         className="hover:bg-slate-50 transition-colors group"
