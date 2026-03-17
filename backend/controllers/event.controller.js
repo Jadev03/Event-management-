@@ -119,8 +119,102 @@ const listMyEvents = async (req, res) => {
   }
 };
 
+const updateMyEvent = async (req, res) => {
+  try {
+    const deny = requireOrganizer(req, res);
+    if (deny) return;
+
+    const eventId = req.params?.id;
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event id is required' });
+    }
+
+    const event = await Event.findOne({ _id: eventId, createdBy: req.user.id });
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const {
+      name,
+      description,
+      type,
+      date,
+      time,
+      place,
+      totalSeats,
+      thumbnailUrl,
+      status,
+    } = req.body || {};
+
+    if (typeof name === 'string') event.name = name.trim();
+    if (typeof description === 'string') event.description = description.trim();
+    if (typeof type === 'string') {
+      if (!EVENT_TYPES.includes(type)) {
+        return res.status(400).json({
+          message: 'Invalid event type. Allowed: academic, work, sports, social',
+        });
+      }
+      event.type = type;
+    }
+    if (typeof date === 'string' || date instanceof Date) {
+      const parsedDate = new Date(date);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid date' });
+      }
+      event.date = parsedDate;
+    }
+    if (typeof time === 'string') event.time = time.trim();
+    if (typeof place === 'string') event.place = place.trim();
+    if (totalSeats !== undefined) {
+      const seats = Number.parseInt(totalSeats, 10);
+      if (!Number.isFinite(seats) || seats < 1) {
+        return res
+          .status(400)
+          .json({ message: 'totalSeats must be a number >= 1' });
+      }
+      event.totalSeats = seats;
+    }
+    if (typeof thumbnailUrl === 'string') event.thumbnailUrl = thumbnailUrl.trim();
+
+    // Optional: allow organizer to set status (e.g., mark completed)
+    if (typeof status === 'string') {
+      const allowed = ['pending', 'completed'];
+      if (!allowed.includes(status)) {
+        return res.status(400).json({
+          message: 'Invalid status update. Allowed: pending, completed',
+        });
+      }
+      event.status = status;
+    }
+
+    await event.save();
+
+    return res.status(200).json({
+      message: 'Event updated successfully',
+      event: {
+        id: event._id.toString(),
+        name: event.name,
+        description: event.description,
+        type: event.type,
+        date: event.date,
+        time: event.time,
+        place: event.place,
+        totalSeats: event.totalSeats,
+        thumbnailUrl: event.thumbnailUrl,
+        status: event.status,
+        createdAt: event.createdAt,
+        updatedAt: event.updatedAt,
+      },
+    });
+  } catch (error) {
+    logger.error('Error updating event', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createEvent,
   listMyEvents,
+  updateMyEvent,
 };
 
