@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
+import { BrowserMultiFormatReader } from '@zxing/browser'
 import {
   Calendar,
   CheckCircle2,
@@ -7,6 +8,7 @@ import {
   LayoutDashboard,
   MoreVertical,
   Plus,
+  QrCode,
   Search,
   Users,
   X,
@@ -28,13 +30,6 @@ import {
 const cn = (...classes) => classes.filter(Boolean).join(' ')
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444']
-
-const pieData = [
-  { name: 'Approved', value: 12 },
-  { name: 'Pending', value: 5 },
-  { name: 'Completed', value: 24 },
-  { name: 'Rejected', value: 2 },
-]
 
 const MOCK_EVENTS = [
   {
@@ -115,6 +110,29 @@ export function OrganizerDashboard({ user, onLogout }) {
     status: 'pending',
   })
 
+  const [scannerEventId, setScannerEventId] = useState('')
+  const [scannerError, setScannerError] = useState('')
+  const [scannerStatus, setScannerStatus] = useState('idle') // idle | starting | scanning
+  const [lastScan, setLastScan] = useState(null)
+  const [isPostingScan, setIsPostingScan] = useState(false)
+
+  const [overview, setOverview] = useState({
+    stats: {
+      totalEvents: 0,
+      approvedEvents: 0,
+      pendingApprovals: 0,
+      totalScans: 0,
+      avgAttendancePct: 0,
+    },
+    statusDistribution: [
+      { name: 'Approved', value: 0 },
+      { name: 'Pending', value: 0 },
+      { name: 'Completed', value: 0 },
+      { name: 'Rejected', value: 0 },
+    ],
+    topEvents: [],
+  })
+
   useEffect(() => {
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
@@ -133,6 +151,24 @@ export function OrganizerDashboard({ user, onLogout }) {
       .catch(() => {
         // Fall back to local mocks if backend is unavailable
         setEvents(MOCK_EVENTS)
+      })
+  }, [API_BASE_URL])
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) return
+
+    axios
+      .get(`${API_BASE_URL}/api/events/overview`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        if (res.data?.stats && res.data?.statusDistribution) {
+          setOverview(res.data)
+        }
+      })
+      .catch(() => {
+        // keep last known overview
       })
   }, [API_BASE_URL])
 
@@ -331,6 +367,7 @@ export function OrganizerDashboard({ user, onLogout }) {
         return {
           id: e.id,
           title: e.name,
+          type: e.type ?? '',
           date: new Date(e.date).toLocaleDateString(undefined, {
             month: 'short',
             day: '2-digit',
@@ -345,6 +382,12 @@ export function OrganizerDashboard({ user, onLogout }) {
       }),
     [events],
   )
+
+  const scannerEvents = useMemo(() => {
+    const base = events?.length ? events : []
+    // Scanner should show approved events, and those marked completed after scanning.
+    return base.filter((e) => e.status === 'approved' || e.status === 'completed')
+  }, [events])
 
   return (
     <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
@@ -381,6 +424,7 @@ export function OrganizerDashboard({ user, onLogout }) {
           {[
             { id: 'overview', label: 'Overview', icon: LayoutDashboard },
             { id: 'events', label: 'My Events', icon: Calendar },
+            { id: 'scanner', label: 'Ticket Scanner', icon: QrCode },
           ].map((item) => (
             <button
               key={item.id}
@@ -834,25 +878,25 @@ export function OrganizerDashboard({ user, onLogout }) {
                 {[
                   {
                     label: 'Active Events',
-                    value: '8',
+                    value: String(overview.stats.approvedEvents ?? 0),
                     icon: Calendar,
                     color: 'bg-indigo-50 text-indigo-600',
                   },
                   {
                     label: 'Total Registrations',
-                    value: '1,240',
+                    value: String(overview.stats.totalScans ?? 0),
                     icon: Users,
                     color: 'bg-emerald-50 text-emerald-600',
                   },
                   {
                     label: 'Avg. Attendance',
-                    value: '84%',
+                    value: `${overview.stats.avgAttendancePct ?? 0}%`,
                     icon: CheckCircle2,
                     color: 'bg-orange-50 text-orange-600',
                   },
                   {
                     label: 'Pending Approvals',
-                    value: '3',
+                    value: String(overview.stats.pendingApprovals ?? 0),
                     icon: Clock,
                     color: 'bg-purple-50 text-purple-600',
                   },
@@ -886,18 +930,18 @@ export function OrganizerDashboard({ user, onLogout }) {
                 {/* Registration Trends (compact for overview) */}
                 <div className="lg:col-span-2 bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
                   <h2 className="text-xl font-bold text-slate-900 mb-8">
-                    Registration Trends (Top events)
+                    Check-ins (Top events)
                   </h2>
                   <div className="h-[260px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={MOCK_EVENTS.slice(0, 4)}>
+                      <BarChart data={overview.topEvents.slice(0, 6)}>
                         <CartesianGrid
                           strokeDasharray="3 3"
                           vertical={false}
                           stroke="#F1F5F9"
                         />
                         <XAxis
-                          dataKey="title"
+                          dataKey="name"
                           axisLine={false}
                           tickLine={false}
                           tick={{ fontSize: 10, fill: '#64748B' }}
@@ -918,7 +962,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                           }}
                         />
                         <Bar
-                          dataKey="registeredCount"
+                          dataKey="scans"
                           fill="#4F46E5"
                           radius={[6, 6, 0, 0]}
                           barSize={36}
@@ -937,7 +981,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={pieData}
+                          data={overview.statusDistribution}
                           cx="50%"
                           cy="50%"
                           innerRadius={60}
@@ -945,7 +989,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                           paddingAngle={5}
                           dataKey="value"
                         >
-                          {pieData.map((entry, index) => (
+                          {overview.statusDistribution.map((entry, index) => (
                             <Cell
                               key={`cell-${index}`}
                               fill={COLORS[index % COLORS.length]}
@@ -957,7 +1001,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                     </ResponsiveContainer>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-6">
-                    {pieData.map((item, i) => (
+                    {overview.statusDistribution.map((item, i) => (
                       <div key={item.name} className="flex items-center gap-2">
                         <div
                           className="w-3 h-3 rounded-full"
@@ -972,6 +1016,23 @@ export function OrganizerDashboard({ user, onLogout }) {
                 </div>
               </section>
             </>
+          )}
+
+          {activeTab === 'scanner' && (
+            <TicketScannerPanel
+              apiBaseUrl={API_BASE_URL}
+              scannerEvents={scannerEvents}
+              scannerEventId={scannerEventId}
+              setScannerEventId={setScannerEventId}
+              scannerError={scannerError}
+              setScannerError={setScannerError}
+              scannerStatus={scannerStatus}
+              setScannerStatus={setScannerStatus}
+              lastScan={lastScan}
+              setLastScan={setLastScan}
+              isPostingScan={isPostingScan}
+              setIsPostingScan={setIsPostingScan}
+            />
           )}
 
           {/* Events tab: full managed events table */}
@@ -1011,6 +1072,9 @@ export function OrganizerDashboard({ user, onLogout }) {
                         Event Name
                       </th>
                       <th className="px-6 md:px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Type
+                      </th>
+                      <th className="px-6 md:px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
                         Thumbnail
                       </th>
                       <th className="px-6 md:px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
@@ -1042,6 +1106,15 @@ export function OrganizerDashboard({ user, onLogout }) {
                               {event.title}
                             </span>
                           </div>
+                        </td>
+                        <td className="px-6 md:px-8 py-4">
+                          {event.type ? (
+                            <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest bg-slate-50 text-slate-600 border border-slate-100">
+                              {event.type}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="px-6 md:px-8 py-4">
                           {event.thumbnailUrl ? (
@@ -1109,5 +1182,343 @@ export function OrganizerDashboard({ user, onLogout }) {
         </main>
       </div>
     </div>
+  )
+}
+
+function TicketScannerPanel({
+  apiBaseUrl,
+  scannerEvents,
+  scannerEventId,
+  setScannerEventId,
+  scannerError,
+  setScannerError,
+  scannerStatus,
+  setScannerStatus,
+  lastScan,
+  setLastScan,
+  isPostingScan,
+  setIsPostingScan,
+}) {
+  const [videoEl, setVideoEl] = useState(null)
+
+  const parseEventStartMs = (ev) => {
+    if (!ev?.date || !ev?.time) return null
+    const d = new Date(ev.date)
+    if (Number.isNaN(d.getTime())) return null
+    const [hh, mm] = String(ev.time).split(':')
+    const h = Number.parseInt(hh, 10)
+    const m = Number.parseInt(mm, 10)
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+    d.setHours(h, m, 0, 0)
+    return d.getTime()
+  }
+
+  // Assumption: an event is "occurring" within 2 hours from start time.
+  const pickActiveEventId = (items) => {
+    const now = Date.now()
+    const windowMs = 2 * 60 * 60 * 1000
+    const enriched = (items || [])
+      .map((e) => ({ e, startMs: parseEventStartMs(e) }))
+      .filter((x) => x.startMs)
+      .sort((a, b) => a.startMs - b.startMs)
+
+    const ongoing = enriched.find(
+      (x) => now >= x.startMs && now < x.startMs + windowMs,
+    )
+    if (ongoing) return ongoing.e.id
+
+    // Else: pick the next upcoming event (closest in the future)
+    const upcoming = enriched.find((x) => x.startMs > now)
+    if (upcoming) return upcoming.e.id
+
+    // Else: pick the most recent past event
+    return enriched.length ? enriched[enriched.length - 1].e.id : ''
+  }
+
+  const currentEvent = useMemo(
+    () => (scannerEvents || []).find((e) => e.id === scannerEventId) || null,
+    [scannerEvents, scannerEventId],
+  )
+
+  useEffect(() => {
+    if (!scannerEvents?.length) return
+    if (!scannerEventId) setScannerEventId(pickActiveEventId(scannerEvents))
+  }, [scannerEvents, scannerEventId, setScannerEventId])
+
+  useEffect(() => {
+    if (!videoEl) return
+    if (scannerStatus !== 'scanning') return
+    if (!scannerEventId) return
+    if (currentEvent?.status === 'completed') {
+      setScannerError('This event is completed. Scanning is disabled.')
+      setScannerStatus('idle')
+      return
+    }
+
+    const reader = new BrowserMultiFormatReader()
+    let stopRequested = false
+
+    setScannerError('')
+    setLastScan(null)
+
+    reader
+      .decodeFromVideoDevice(undefined, videoEl, (result, err) => {
+        if (stopRequested) return
+        if (result) {
+          const text = result.getText()
+          setLastScan({ text, scannedAt: Date.now() })
+          setScannerStatus('idle')
+        } else if (err && err.name !== 'NotFoundException') {
+          setScannerError('Unable to read QR. Try adjusting the camera angle.')
+        }
+      })
+      .catch(() => {
+        setScannerError(
+          'Camera access denied or not available. Please allow camera permission.',
+        )
+        setScannerStatus('idle')
+      })
+
+    return () => {
+      stopRequested = true
+      try {
+        reader.reset()
+      } catch {
+        // ignore
+      }
+    }
+  }, [
+    videoEl,
+    scannerStatus,
+    scannerEventId,
+    currentEvent?.status,
+    setLastScan,
+    setScannerError,
+    setScannerStatus,
+  ])
+
+  const postScan = async () => {
+    if (!lastScan?.text || !scannerEventId) return
+    setIsPostingScan(true)
+    setScannerError('')
+    try {
+      const accessToken = localStorage.getItem('accessToken')
+      if (!accessToken) throw new Error('not_logged_in')
+      await axios.post(
+        `${apiBaseUrl}/api/events/${scannerEventId}/checkin`,
+        { rawQr: lastScan.text },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        (e?.message === 'not_logged_in' ? 'You are not logged in.' : null) ||
+        'Failed to record scan.'
+      setScannerError(msg)
+    } finally {
+      setIsPostingScan(false)
+    }
+  }
+
+  const markCompleted = async () => {
+    if (!scannerEventId) return
+    setScannerError('')
+    try {
+      const accessToken = localStorage.getItem('accessToken')
+      if (!accessToken) throw new Error('not_logged_in')
+      await axios.put(
+        `${apiBaseUrl}/api/events/${scannerEventId}`,
+        { status: 'completed' },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      setScannerStatus('idle')
+      setLastScan(null)
+      setScannerError('Event marked as completed.')
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        (e?.message === 'not_logged_in' ? 'You are not logged in.' : null) ||
+        'Failed to mark event completed.'
+      setScannerError(msg)
+    }
+  }
+
+  return (
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+          Ticket Scanner
+        </h1>
+        <p className="text-slate-500 mt-1">
+          Scan user QR codes for accepted events and record attendance.
+        </p>
+      </div>
+
+      {!scannerEvents?.length && (
+        <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+          <p className="text-sm text-slate-600">
+            No accepted (approved) events found yet. Once an event is approved,
+            it will appear here for scanning.
+          </p>
+        </div>
+      )}
+
+      {scannerEvents?.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1 bg-white p-6 rounded-[28px] border border-black/5 shadow-sm space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-600">
+                  Approved events
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  Click to scan
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {scannerEvents.map((e) => {
+                  const isSelected = e.id === scannerEventId
+                  const badge =
+                    e.status === 'completed' ? 'Completed' : 'Active'
+                  const badgeClass =
+                    e.status === 'completed'
+                      ? 'bg-slate-50 text-slate-600 border-slate-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => {
+                        if (scannerStatus === 'scanning') return
+                        setScannerEventId(e.id)
+                        setScannerError('')
+                        setLastScan(null)
+                      }}
+                      className={cn(
+                        'w-full text-left p-3 rounded-2xl border transition-colors',
+                        isSelected
+                          ? 'bg-indigo-50/60 border-indigo-100'
+                          : 'bg-white border-black/5 hover:bg-slate-50',
+                      )}
+                      disabled={scannerStatus === 'scanning'}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-900 truncate">
+                            {e.name}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {new Date(e.date).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: '2-digit',
+                              year: 'numeric',
+                            })}{' '}
+                            • {e.time}
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            'shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border',
+                            badgeClass,
+                          )}
+                        >
+                          {badge}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setScannerStatus((s) => (s === 'scanning' ? 'idle' : 'scanning'))
+              }
+              className={cn(
+                'w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold transition-colors border',
+                scannerStatus === 'scanning'
+                  ? 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100'
+                  : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700',
+              )}
+              disabled={!scannerEventId || currentEvent?.status === 'completed'}
+            >
+              <QrCode size={18} />
+              {scannerStatus === 'scanning' ? 'Stop scanning' : 'Start scanning'}
+            </button>
+
+            <button
+              type="button"
+              onClick={markCompleted}
+              disabled={!scannerEventId || currentEvent?.status === 'completed'}
+              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-2xl text-sm font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Mark event completed
+            </button>
+
+            {scannerError && (
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {scannerError}
+              </div>
+            )}
+
+            {lastScan && (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 space-y-2">
+                <p className="text-sm font-bold text-emerald-800">
+                  QR scanned
+                </p>
+                <p className="text-xs text-emerald-900 break-words">
+                  {lastScan.text}
+                </p>
+                <button
+                  type="button"
+                  onClick={postScan}
+                  disabled={isPostingScan}
+                  className="w-full mt-2 inline-flex items-center justify-center px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isPostingScan ? 'Recording…' : 'Record scan'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-2 bg-white p-6 rounded-[28px] border border-black/5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Camera</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Keep the QR code within the frame.
+                </p>
+              </div>
+              <span
+                className={cn(
+                  'px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border',
+                  scannerStatus === 'scanning'
+                    ? 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                    : 'bg-slate-50 text-slate-600 border-slate-100',
+                )}
+              >
+                {scannerStatus === 'scanning' ? 'Scanning' : 'Idle'}
+              </span>
+            </div>
+
+            <div className="relative rounded-3xl overflow-hidden border border-black/5 bg-black aspect-video">
+              <video
+                ref={setVideoEl}
+                className="w-full h-full object-cover"
+                muted
+                playsInline
+              />
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-8 rounded-2xl border-2 border-white/60 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   )
 }

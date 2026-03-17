@@ -1,4 +1,5 @@
 const { Event, EVENT_TYPES } = require('../models/event.model');
+const { Attendance } = require('../models/attendance.model');
 const { logger } = require('../utils/logger');
 
 const requireOrganizer = (req, res) => {
@@ -212,9 +213,130 @@ const updateMyEvent = async (req, res) => {
   }
 };
 
+const checkInQr = async (req, res) => {
+  try {
+    const deny = requireOrganizer(req, res);
+    if (deny) return;
+
+    const eventId = req.params?.id;
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event id is required' });
+    }
+
+    const event = await Event.findOne({ _id: eventId, createdBy: req.user.id });
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const rawQr = String(req.body?.rawQr || '').trim();
+    if (!rawQr) {
+      return res.status(400).json({ message: 'rawQr is required' });
+    }
+
+    const created = await Attendance.create({
+      eventId: event._id,
+      organizerId: req.user.id,
+      rawQr,
+      scannedAt: new Date(),
+    });
+
+    return res.status(201).json({
+      message: 'QR scanned and recorded',
+      checkIn: {
+        id: created._id.toString(),
+        eventId: created.eventId.toString(),
+        rawQr: created.rawQr,
+        scannedAt: created.scannedAt,
+      },
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ message: 'This QR was already scanned' });
+    }
+    logger.error('Error recording check-in', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const getOrganizerOverview = async (req, res) => {
+  try {
+    const deny = requireOrganizer(req, res);
+    if (deny) return;
+
+    const organizerId = req.user.id;
+    const events = await Event.find({ createdBy: organizerId }).lean();
+    const totalEvents = events.length;
+
+    const statusCounts = events.reduce(
+      (acc, e) => {
+        const key = e.status || 'pending';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      },
+      { approved: 0, pending: 0, completed: 0, rejected: 0 }
+    );
+
+    const eventIds = events.map((e) => e._id);
+    const attendanceAgg = await Attendance.aggregate([
+      { $match: { eventId: { $in: eventIds } } },
+      { $group: { _id: '$eventId', scans: { $sum: 1 } } },
+    ]);
+    const scansByEventId = new Map(
+      attendanceAgg.map((x) => [String(x._id), x.scans])
+    );
+
+    const totalScans = attendanceAgg.reduce((sum, x) => sum + x.scans, 0);
+    const approvedEvents = events.filter((e) => e.status === 'approved');
+    const avgAttendancePct =
+      approvedEvents.length === 0
+        ? 0
+        : Math.round(
+            (approvedEvents.reduce((sum, e) => {
+              const scans = scansByEventId.get(String(e._id)) || 0;
+              const cap = e.totalSeats || 1;
+              return sum + Math.min(1, scans / cap);
+            }, 0) /
+              approvedEvents.length) *
+              100
+          );
+
+    const topEvents = [...events]
+      .map((e) => ({
+        id: String(e._id),
+        name: e.name,
+        scans: scansByEventId.get(String(e._id)) || 0,
+        totalSeats: e.totalSeats || 0,
+      }))
+      .sort((a, b) => b.scans - a.scans)
+      .slice(0, 6);
+
+    return res.status(200).json({
+      stats: {
+        totalEvents,
+        approvedEvents: statusCounts.approved || 0,
+        pendingApprovals: statusCounts.pending || 0,
+        totalScans,
+        avgAttendancePct,
+      },
+      statusDistribution: [
+        { name: 'Approved', value: statusCounts.approved || 0 },
+        { name: 'Pending', value: statusCounts.pending || 0 },
+        { name: 'Completed', value: statusCounts.completed || 0 },
+        { name: 'Rejected', value: statusCounts.rejected || 0 },
+      ],
+      topEvents,
+    });
+  } catch (error) {
+    logger.error('Error building organizer overview', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createEvent,
   listMyEvents,
   updateMyEvent,
+  checkInQr,
+  getOrganizerOverview,
 };
 
