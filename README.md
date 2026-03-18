@@ -57,6 +57,16 @@ npm run seed:faculty
 npm run seed:all
 ```
 
+### Default users (created by `npm run seed:users`)
+Use these accounts to log in after seeding:
+
+| role | name | email | password |
+| --- | --- | --- | --- |
+| student | Student One | student1@university.ac.lk | student123 |
+| facultyCoordinator | Faculty Coordinator | faculty1@university.ac.lk | faculty123 |
+| organizer | Event Organizer | organizer1@university.ac.lk | organizer123 |
+| admin | System Admin | admin1@university.ac.lk | admin123 |
+
 ### Run the backend
 ```bash
 cd backend
