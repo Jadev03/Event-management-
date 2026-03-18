@@ -1,5 +1,6 @@
 const { Event, EVENT_TYPES } = require('../models/event.model');
 const { Attendance } = require('../models/attendance.model');
+const { Registration } = require('../models/registration.model');
 const { logger } = require('../utils/logger');
 
 const requireOrganizer = (req, res) => {
@@ -16,6 +17,14 @@ const requireFacultyCoordinator = (req, res) => {
     return res
       .status(403)
       .json({ message: 'Faculty coordinator access required' });
+  }
+  return null;
+};
+
+const requireStudent = (req, res) => {
+  const role = req.user?.role;
+  if (role !== 'student') {
+    return res.status(403).json({ message: 'Student access required' });
   }
   return null;
 };
@@ -380,6 +389,81 @@ const listApprovedEvents = async (req, res) => {
   }
 };
 
+const registerForEvent = async (req, res) => {
+  try {
+    const deny = requireStudent(req, res);
+    if (deny) return;
+
+    const eventId = req.params?.id;
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event id is required' });
+    }
+
+    const event = await Event.findById(eventId).lean();
+    if (!event || event.status !== 'approved') {
+      return res.status(404).json({ message: 'Approved event not found' });
+    }
+
+    const totalSeats = event.totalSeats || 0;
+    if (!Number.isFinite(totalSeats) || totalSeats <= 0) {
+      return res
+        .status(400)
+        .json({ message: 'Event does not have a valid seat count' });
+    }
+
+    const existing = await Registration.findOne({
+      eventId: event._id,
+      userId: req.user.id,
+    }).lean();
+    if (existing) {
+      return res.status(409).json({ message: 'You are already registered' });
+    }
+
+    const currentCount = await Registration.countDocuments({
+      eventId: event._id,
+    });
+    if (currentCount >= totalSeats) {
+      return res
+        .status(409)
+        .json({ message: 'This event is fully booked. No seats available.' });
+    }
+
+    const reg = await Registration.create({
+      eventId: event._id,
+      userId: req.user.id,
+      registeredAt: new Date(),
+    });
+
+    const newCount = currentCount + 1;
+
+    logger.info('Student registered for event', {
+      eventId: event._id.toString(),
+      userId: req.user.id,
+    });
+
+    return res.status(201).json({
+      message: 'Registered successfully',
+      registration: {
+        id: reg._id.toString(),
+        eventId: reg.eventId.toString(),
+        userId: reg.userId.toString(),
+        registeredAt: reg.registeredAt,
+      },
+      registeredCount: newCount,
+      totalSeats,
+      remainingSeats: Math.max(0, totalSeats - newCount),
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res
+        .status(409)
+        .json({ message: 'You are already registered for this event' });
+    }
+    logger.error('Error registering for event', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 const approveEvent = async (req, res) => {
   try {
     const deny = requireFacultyCoordinator(req, res);
@@ -548,6 +632,39 @@ const getOrganizerOverview = async (req, res) => {
   }
 };
 
+const getStudentRegistrations = async (req, res) => {
+  try {
+    const deny = requireStudent(req, res);
+    if (deny) return;
+
+    const regs = await Registration.find({ userId: req.user.id })
+      .populate('eventId')
+      .lean();
+
+    const events = regs
+      .map((r) => r.eventId)
+      .filter(Boolean)
+      .map((e) => ({
+        id: e._id.toString(),
+        name: e.name,
+        description: e.description,
+        type: e.type,
+        date: e.date,
+        time: e.time,
+        place: e.place,
+        totalSeats: e.totalSeats,
+        thumbnailUrl: e.thumbnailUrl,
+        status: e.status,
+        createdAt: e.createdAt,
+      }));
+
+    return res.status(200).json({ events });
+  } catch (error) {
+    logger.error('Error listing student registrations', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createEvent,
   listMyEvents,
@@ -559,5 +676,7 @@ module.exports = {
   rejectEvent,
   checkInQr,
   getOrganizerOverview,
+  registerForEvent,
+  getStudentRegistrations,
 };
 

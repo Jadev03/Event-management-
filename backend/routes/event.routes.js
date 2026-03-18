@@ -10,6 +10,8 @@ const {
   rejectEvent,
   checkInQr,
   getOrganizerOverview,
+  registerForEvent,
+  getStudentRegistrations,
 } = require('../controllers/event.controller');
 
 const router = express.Router();
@@ -21,6 +23,10 @@ router.get('/mine', listMyEvents);
 router.get('/approved', listApprovedEvents);
 router.put('/:id', updateMyEvent);
 router.post('/:id/checkin', checkInQr);
+router.post('/:id/register', registerForEvent);
+
+// Student endpoints
+router.get('/student/registrations', getStudentRegistrations);
 
 // Faculty coordinator endpoints
 router.get('/pending', listPendingEvents);

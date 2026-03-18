@@ -23,6 +23,10 @@ import { QRCodeSVG } from 'qrcode.react'
 import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const FALLBACK_NOW = new Date('2026-05-13T12:00:00')
+
 const MOCK_EVENTS = [
   {
     id: 'e1',
@@ -134,45 +138,109 @@ const MOCK_EVENTS = [
   },
 ]
 
+function useStudentEventsData() {
+  const [events, setEvents] = useState([])
+  const [loadStatus, setLoadStatus] = useState('idle') // idle | loading
+  const [loadError, setLoadError] = useState('')
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setLoadError('You are not logged in.')
+      setEvents([])
+      return
+    }
+
+    setLoadStatus('loading')
+    setLoadError('')
+    axios
+      .get(`${API_BASE_URL}/api/events/approved`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        const apiEvents = res.data?.events ?? []
+        setEvents(apiEvents)
+      })
+      .catch((e) => {
+        setLoadError(
+          e?.response?.data?.message ||
+            'Unable to load events from server. Showing sample data.',
+        )
+        setEvents([])
+      })
+      .finally(() => setLoadStatus('idle'))
+  }, [])
+
+  const normalizedEvents = useMemo(() => {
+    const source = events?.length ? events : MOCK_EVENTS
+    return source.map((e) => {
+      if (e.title && e.category && e.date) return e
+      const category = e.type === 'work' ? 'workshop' : e.type
+      const dateLabel = new Date(e.date).toLocaleDateString(undefined, {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      })
+      return {
+        id: e.id,
+        title: e.name,
+        description: e.description ?? '',
+        date: e.date,
+        dateLabel,
+        time: e.time,
+        location: e.place,
+        category,
+        registeredCount: 0,
+        capacity: e.totalSeats,
+        image: e.thumbnailUrl || 'https://picsum.photos/seed/event/800/400',
+      }
+    })
+  }, [events])
+
+  return {
+    events: normalizedEvents,
+    rawEvents: events,
+    loadStatus,
+    loadError,
+  }
+}
+
 export function StudentDashboard({ user, onLogout }) {
+  const { events, loadStatus, loadError } = useStudentEventsData()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const [registrations, setRegistrations] = useState({})
 
-  const now = useMemo(() => new Date('2026-05-13T12:00:00'), [])
+  const now = useMemo(() => new Date(), [])
+
+  const registeredEvents = useMemo(
+    () => events.filter((e) => registrations[e.id]),
+    [events, registrations],
+  )
 
   const registeredUpcoming = useMemo(() => {
-    const sorted = [...MOCK_EVENTS].sort(
-      (a, b) => new Date(a.dateLabel).getTime() - new Date(b.dateLabel).getTime(),
+    const sorted = [...registeredEvents].sort(
+      (a, b) => new Date(a.date || a.dateLabel).getTime() - new Date(b.date || b.dateLabel).getTime(),
     )
-    return sorted.filter((e) => new Date(e.dateLabel).getTime() >= now.getTime())
-  }, [now])
+    return sorted.filter(
+      (e) => new Date(e.date || e.dateLabel).getTime() >= now.getTime(),
+    )
+  }, [registeredEvents, now])
 
   const attendedEvents = useMemo(
-    () => [
-      {
-        id: 'a1',
-        title: 'Campus Hack Night',
-        dateLabel: 'Apr 22, 2026',
-        time: '06:00 PM',
-        location: 'Innovation Lab',
-      },
-      {
-        id: 'a2',
-        title: 'Research Poster Session',
-        dateLabel: 'Mar 10, 2026',
-        time: '03:00 PM',
-        location: 'Conference Hall A',
-      },
-    ],
-    [],
+    () =>
+      registeredEvents.filter(
+        (e) => new Date(e.date || e.dateLabel).getTime() < now.getTime(),
+      ),
+    [registeredEvents, now],
   )
 
   const thisWeekUpcoming = useMemo(() => {
     const end = new Date(now)
     end.setDate(end.getDate() + 7)
     return registeredUpcoming.filter((e) => {
-      const t = new Date(e.dateLabel).getTime()
+      const t = new Date(e.date || e.dateLabel).getTime()
       return t >= now.getTime() && t < end.getTime()
     })
   }, [now, registeredUpcoming])
@@ -234,6 +302,100 @@ export function StudentDashboard({ user, onLogout }) {
     ],
     [],
   )
+
+  // Restore registrations from localStorage on first load
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('studentRegistrations')
+      if (!stored) return
+      const parsed = JSON.parse(stored)
+      if (parsed && typeof parsed === 'object') {
+        setRegistrations(parsed)
+      }
+    } catch {
+      localStorage.removeItem('studentRegistrations')
+    }
+  }, [])
+
+  // Load registrations from backend so counts persist and match server
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      return
+    }
+
+    axios
+      .get(`${API_BASE_URL}/api/events/student/registrations`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        const fromServer = (res.data?.events ?? []).reduce((acc, ev) => {
+          if (ev?.id) acc[ev.id] = 1
+          return acc
+        }, {})
+
+        setRegistrations((prev) => {
+          const merged = { ...prev, ...fromServer }
+          try {
+            localStorage.setItem(
+              'studentRegistrations',
+              JSON.stringify(merged),
+            )
+          } catch {
+            // ignore persistence errors
+          }
+          return merged
+        })
+      })
+      .catch(() => {
+        // If this fails, we still fall back to localStorage-only registrations.
+      })
+  }, [])
+
+  const handleRegisterForEvent = async (event) => {
+    const ok = window.confirm(
+      `Are you sure you want to register for "${event.title}"?`,
+    )
+    if (!ok) return
+
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      alert('You are not logged in.')
+      return
+    }
+
+    try {
+      await axios.post(
+        `${API_BASE_URL}/api/events/${event.id}/register`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      )
+
+      setRegistrations((prev) => {
+        const current = prev[event.id] || 0
+        const next = {
+          ...prev,
+          [event.id]: current + 1,
+        }
+        try {
+          localStorage.setItem('studentRegistrations', JSON.stringify(next))
+        } catch {
+          // ignore persistence errors
+        }
+        return next
+      })
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        'Unable to register for this event. Please try again.'
+      alert(msg)
+    }
+  }
 
   return (
     <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
@@ -409,6 +571,12 @@ export function StudentDashboard({ user, onLogout }) {
             </div>
           )}
 
+          {activeTab === 'dashboard' && loadError && (
+            <div className="mb-4 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+              {loadError}
+            </div>
+          )}
+
           {/* Stats only on dashboard */}
           {activeTab === 'dashboard' && (
             <section className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 mb-8">
@@ -444,8 +612,18 @@ export function StudentDashboard({ user, onLogout }) {
               thisWeekUpcoming={thisWeekUpcoming}
             />
           )}
-          {activeTab === 'events' && <StudentEventsSection />}
-          {activeTab === 'tickets' && <StudentTicketsSection user={user} />}
+          {activeTab === 'events' && (
+            <StudentEventsSection
+              events={events}
+              loadStatus={loadStatus}
+              loadError={loadError}
+              registrations={registrations}
+              onRegister={handleRegisterForEvent}
+            />
+          )}
+          {activeTab === 'tickets' && (
+            <StudentTicketsSection user={user} events={registeredEvents} />
+          )}
         </main>
       </div>
     </div>
@@ -617,66 +795,15 @@ function StudentOverviewSection({
   )
 }
 
-function StudentEventsSection() {
-  const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
-
+function StudentEventsSection({
+  events,
+  loadStatus,
+  loadError,
+  registrations,
+  onRegister,
+}) {
   const [filter, setFilter] = useState('all')
-  const [events, setEvents] = useState([])
-  const [loadStatus, setLoadStatus] = useState('idle') // idle | loading
-  const [loadError, setLoadError] = useState('')
-
-  useEffect(() => {
-    const accessToken = localStorage.getItem('accessToken')
-    if (!accessToken) {
-      setLoadError('You are not logged in.')
-      setEvents([])
-      return
-    }
-
-    setLoadStatus('loading')
-    setLoadError('')
-    axios
-      .get(`${API_BASE_URL}/api/events/approved`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      .then((res) => {
-        setEvents(res.data?.events ?? [])
-      })
-      .catch((e) => {
-        setLoadError(
-          e?.response?.data?.message ||
-            'Unable to load events from server. Showing sample data.',
-        )
-        setEvents([])
-      })
-      .finally(() => setLoadStatus('idle'))
-  }, [API_BASE_URL])
-
-  const normalizedEvents = useMemo(() => {
-    const source = events?.length ? events : MOCK_EVENTS
-    return source.map((e) => {
-      if (e.title && e.category) return e
-      const category = e.type === 'work' ? 'workshop' : e.type
-      const dateLabel = new Date(e.date).toLocaleDateString(undefined, {
-        month: 'short',
-        day: '2-digit',
-        year: 'numeric',
-      })
-      return {
-        id: e.id,
-        title: e.name,
-        description: e.description ?? '',
-        dateLabel,
-        time: e.time,
-        location: e.place,
-        category,
-        registeredCount: 0,
-        capacity: e.totalSeats,
-        image: e.thumbnailUrl || 'https://picsum.photos/seed/event/800/400',
-      }
-    })
-  }, [events])
+  const normalizedEvents = events?.length ? events : MOCK_EVENTS
 
   const filteredEvents =
     filter === 'all'
@@ -767,13 +894,57 @@ function StudentEventsSection() {
                   </span>
                   <span className="flex items-center gap-2">
                     <Users size={14} className="text-slate-400" />{' '}
-                    {event.registeredCount}/{event.capacity}
+                    {(event.registeredCount || 0) +
+                      (registrations?.[event.id] || 0)}
+                    /{event.capacity}
                   </span>
                 </div>
               </div>
-              <button className="mt-4 w-full py-2.5 rounded-2xl border border-indigo-100 text-indigo-600 text-sm font-bold hover:bg-indigo-50 transition-colors">
-                Register for this event
-              </button>
+              {(() => {
+                const currentRegistrations = registrations?.[event.id] || 0
+                const capacity = event.capacity || 0
+                const isFull =
+                  Number.isFinite(capacity) && capacity > 0
+                    ? currentRegistrations >= capacity
+                    : false
+                const isRegistered = currentRegistrations > 0
+
+                if (isFull) {
+                  return (
+                    <button
+                      type="button"
+                      disabled
+                      className="mt-4 w-full py-2.5 rounded-2xl border border-slate-100 text-slate-400 text-sm font-bold bg-slate-50 cursor-not-allowed"
+                    >
+                      Booking full
+                    </button>
+                  )
+                }
+
+                if (isRegistered) {
+                  return (
+                    <button
+                      type="button"
+                      disabled
+                      className="mt-4 w-full py-2.5 rounded-2xl border border-emerald-100 text-emerald-600 text-sm font-bold bg-emerald-50 cursor-default"
+                    >
+                      Registered
+                    </button>
+                  )
+                }
+
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRegister?.(event)
+                    }}
+                    className="mt-4 w-full py-2.5 rounded-2xl border border-indigo-100 text-indigo-600 text-sm font-bold hover:bg-indigo-50 transition-colors"
+                  >
+                    Register for this event
+                  </button>
+                )
+              })()}
             </div>
           </motion.article>
         ))}
@@ -782,10 +953,10 @@ function StudentEventsSection() {
   )
 }
 
-function StudentTicketsSection({ user }) {
+function StudentTicketsSection({ user, events }) {
   const tickets = useMemo(
     () =>
-      MOCK_EVENTS.map((event, idx) => ({
+      (events?.length ? events : []).map((event, idx) => ({
         event,
         id: `TKT-${String(99283 + idx).padStart(5, '0')}-STU`,
         userName: user.username,
