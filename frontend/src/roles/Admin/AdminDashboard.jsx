@@ -87,7 +87,7 @@ export function AdminDashboard({
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newRole, setNewRole] = useState('student')
-  const [lastCreatedUser, setLastCreatedUser] = useState(null)
+  const [isCreatingUser, setIsCreatingUser] = useState(false)
   const [roleOverrides, setRoleOverrides] = useState({})
   const [editingEmail, setEditingEmail] = useState(null)
   const [editingRole, setEditingRole] = useState('student')
@@ -110,30 +110,43 @@ export function AdminDashboard({
     }
     const password = generatePassword()
     if (!onCreateUser) return
-    const created = await onCreateUser({
-      email: newEmail,
-      username: newName,
-      password,
-      role: newRole,
-    })
+    setIsCreatingUser(true)
+    let created = null
+    try {
+      created = await onCreateUser({
+        email: newEmail,
+        username: newName,
+        password,
+        role: newRole,
+      })
+    } catch (err) {
+      // If something unexpected happens, don't crash the page.
+      alert(err?.message || 'Unable to create user.')
+      return
+    } finally {
+      setIsCreatingUser(false)
+    }
     if (!created) return
 
-    const effectivePassword = created.generatedPassword || password
-    setLastCreatedUser({ ...created, generatedPassword: effectivePassword })
     setNewName('')
     setNewEmail('')
 
-    const subject = encodeURIComponent('Your UniEvent account credentials')
-    const body = encodeURIComponent(
-      `Hi ${created.username},\n\n` +
-        `An account has been created for you on the UniEvent system.\n\n` +
-        `Email: ${created.email}\n` +
-        `Temporary password: ${effectivePassword}\n\n` +
-        `Please sign in and change your password as soon as possible.\n\n` +
-        `Best regards,\n` +
-        `Event Management Team`,
-    )
-    window.open(`mailto:${created.email}?subject=${subject}&body=${body}`)
+    try {
+      const effectivePassword = created.generatedPassword || password
+      const subject = encodeURIComponent('Your UniEvent account credentials')
+      const body = encodeURIComponent(
+        `Hi ${created.username},\n\n` +
+          `An account has been created for you on the UniEvent system.\n\n` +
+          `Email: ${created.email}\n` +
+          `Temporary password: ${effectivePassword}\n\n` +
+          `Please sign in and change your password as soon as possible.\n\n` +
+          `Best regards,\n` +
+          `Event Management Team`,
+      )
+      window.open(`mailto:${created.email}?subject=${subject}&body=${body}`)
+    } catch {
+      // If mailto fails (popup blockers), user is still created successfully.
+    }
   }
 
   const totalUsers = users.length
@@ -1067,30 +1080,11 @@ export function AdminDashboard({
                     <button
                       type="submit"
                       className="mt-2 inline-flex items-center justify-center px-4 py-2.5 rounded-2xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors"
+                      disabled={isCreatingUser}
                     >
-                      Create user &amp; open email
+                      {isCreatingUser ? 'Creating…' : 'Create user & open email'}
                     </button>
                   </form>
-
-                  {lastCreatedUser && (
-                    <div className="mt-4 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/60 p-4 space-y-2 max-w-md">
-                      <p className="text-xs font-semibold text-indigo-800">
-                        Last created user
-                      </p>
-                      <p className="text-sm text-slate-800">
-                        {lastCreatedUser.username} ({lastCreatedUser.email}) – role:{' '}
-                        <span className="font-semibold">
-                          {formatRole(lastCreatedUser.role)}
-                        </span>
-                      </p>
-                      <p className="text-xs text-slate-600">
-                        Temporary password:{' '}
-                        <code className="px-1.5 py-0.5 rounded-md bg-white border border-indigo-100 text-[11px]">
-                          {lastCreatedUser.generatedPassword}
-                        </code>
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
