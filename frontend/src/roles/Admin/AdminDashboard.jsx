@@ -7,6 +7,7 @@ import {
   Bell,
   Filter,
   LogOut,
+  Lock,
   LayoutDashboard,
   Menu,
   MoreHorizontal,
@@ -28,6 +29,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { ChangePasswordModal } from '../../components/ChangePasswordModal.jsx'
 
 const cn = (...classes) => classes.filter(Boolean).join(' ')
 
@@ -83,6 +85,7 @@ export function AdminDashboard({
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [usersTab, setUsersTab] = useState('list')
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
 
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
@@ -235,6 +238,10 @@ export function AdminDashboard({
 
   return (
     <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
+      <ChangePasswordModal
+        open={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+      />
       {/* Sidebar / Drawer */}
       <aside className="bg-white border-r border-black/5 flex flex-col z-20 transition-all duration-200" style={{ width: isSidebarOpen ? 260 : 80 }}>
         <div className="p-6 flex items-center justify-between">
@@ -281,6 +288,16 @@ export function AdminDashboard({
         </nav>
 
         <div className="p-4 border-t border-black/5">
+          <button
+            type="button"
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 transition-all duration-200 mb-2"
+          >
+            <Lock size={20} />
+            {isSidebarOpen && (
+              <span className="font-medium text-sm">Change password</span>
+            )}
+          </button>
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 transition-all duration-200"

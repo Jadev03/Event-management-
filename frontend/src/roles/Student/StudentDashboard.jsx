@@ -22,6 +22,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react'
 import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
+import { ChangePasswordModal } from '../../components/ChangePasswordModal.jsx'
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
@@ -210,6 +211,7 @@ export function StudentDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [registrations, setRegistrations] = useState({})
 
   const now = useMemo(() => new Date(), [])
@@ -368,6 +370,10 @@ export function StudentDashboard({ user, onLogout }) {
 
   return (
     <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
+      <ChangePasswordModal
+        open={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+      />
       {/* Sidebar / Drawer */}
       <motion.aside
         initial={false}
@@ -427,6 +433,16 @@ export function StudentDashboard({ user, onLogout }) {
         </nav>
 
         <div className="p-4 border-t border-black/5">
+          <button
+            type="button"
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 transition-all duration-200 mb-2"
+          >
+            <Lock size={20} />
+            {isSidebarOpen && (
+              <span className="font-medium text-sm">Change password</span>
+            )}
+          </button>
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 transition-all duration-200"

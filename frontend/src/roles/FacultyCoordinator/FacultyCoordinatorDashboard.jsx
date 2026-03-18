@@ -15,8 +15,10 @@ import {
   Search,
   LogOut,
   Bell,
+  Lock,
 } from 'lucide-react'
 import { motion } from 'motion/react'
+import { ChangePasswordModal } from '../../components/ChangePasswordModal.jsx'
 import {
   XAxis,
   YAxis,
@@ -106,6 +108,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [overview, setOverview] = useState({
     stats: {
@@ -264,6 +267,10 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
 
   return (
     <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
+      <ChangePasswordModal
+        open={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+      />
       {/* Sidebar */}
       <motion.aside
         initial={false}
@@ -323,6 +330,16 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
         </nav>
 
         <div className="p-4 border-t border-black/5">
+          <button
+            type="button"
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 transition-all duration-200 mb-2"
+          >
+            <Lock size={20} />
+            {isSidebarOpen && (
+              <span className="font-medium text-sm">Change password</span>
+            )}
+          </button>
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 transition-all duration-200"
