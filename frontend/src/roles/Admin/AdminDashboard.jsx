@@ -131,22 +131,7 @@ export function AdminDashboard({
     setNewName('')
     setNewEmail('')
 
-    try {
-      const effectivePassword = created.generatedPassword || password
-      const subject = encodeURIComponent('Your UniEvent account credentials')
-      const body = encodeURIComponent(
-        `Hi ${created.username},\n\n` +
-          `An account has been created for you on the UniEvent system.\n\n` +
-          `Email: ${created.email}\n` +
-          `Temporary password: ${effectivePassword}\n\n` +
-          `Please sign in and change your password as soon as possible.\n\n` +
-          `Best regards,\n` +
-          `Event Management Team`,
-      )
-      window.open(`mailto:${created.email}?subject=${subject}&body=${body}`)
-    } catch {
-      // If mailto fails (popup blockers), user is still created successfully.
-    }
+    // Intentionally do not open mailto/email drafts.
   }
 
   const totalUsers = users.length
