@@ -577,6 +577,8 @@ const getOrganizerOverview = async (req, res) => {
     );
 
     const eventIds = events.map((e) => e._id);
+
+    // Aggregate attendance (each QR scan = one attended)
     const attendanceAgg = await Attendance.aggregate([
       { $match: { eventId: { $in: eventIds } } },
       { $group: { _id: '$eventId', scans: { $sum: 1 } } },
@@ -584,21 +586,29 @@ const getOrganizerOverview = async (req, res) => {
     const scansByEventId = new Map(
       attendanceAgg.map((x) => [String(x._id), x.scans])
     );
+    const totalAttendance = attendanceAgg.reduce(
+      (sum, x) => sum + x.scans,
+      0
+    );
 
-    const totalScans = attendanceAgg.reduce((sum, x) => sum + x.scans, 0);
-    const approvedEvents = events.filter((e) => e.status === 'approved');
+    // Aggregate registrations (students registered per event)
+    const registrationsAgg = await Registration.aggregate([
+      { $match: { eventId: { $in: eventIds } } },
+      { $group: { _id: '$eventId', registrations: { $sum: 1 } } },
+    ]);
+    const registrationsByEventId = new Map(
+      registrationsAgg.map((x) => [String(x._id), x.registrations])
+    );
+    const totalRegistrations = registrationsAgg.reduce(
+      (sum, x) => sum + x.registrations,
+      0
+    );
+
+    // Avg. attendance = total attended / total registrations (over all events)
     const avgAttendancePct =
-      approvedEvents.length === 0
+      totalRegistrations === 0
         ? 0
-        : Math.round(
-            (approvedEvents.reduce((sum, e) => {
-              const scans = scansByEventId.get(String(e._id)) || 0;
-              const cap = e.totalSeats || 1;
-              return sum + Math.min(1, scans / cap);
-            }, 0) /
-              approvedEvents.length) *
-              100
-          );
+        : Math.round((totalAttendance / totalRegistrations) * 100);
 
     const topEvents = [...events]
       .map((e) => ({
@@ -606,6 +616,7 @@ const getOrganizerOverview = async (req, res) => {
         name: e.name,
         scans: scansByEventId.get(String(e._id)) || 0,
         totalSeats: e.totalSeats || 0,
+        registrations: registrationsByEventId.get(String(e._id)) || 0,
       }))
       .sort((a, b) => b.scans - a.scans)
       .slice(0, 6);
@@ -615,7 +626,8 @@ const getOrganizerOverview = async (req, res) => {
         totalEvents,
         approvedEvents: statusCounts.approved || 0,
         pendingApprovals: statusCounts.pending || 0,
-        totalScans,
+        totalRegistrations,
+        totalAttendance,
         avgAttendancePct,
       },
       statusDistribution: [

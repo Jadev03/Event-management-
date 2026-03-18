@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import {
@@ -133,13 +133,14 @@ export function OrganizerDashboard({ user, onLogout }) {
     topEvents: [],
   })
 
-  useEffect(() => {
+  const isFirstTabRender = useRef(true)
+
+  const fetchEvents = useCallback(() => {
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
-      setEvents(MOCK_EVENTS)
+      setEvents([])
       return
     }
-
     axios
       .get(`${API_BASE_URL}/api/events/mine`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -149,15 +150,13 @@ export function OrganizerDashboard({ user, onLogout }) {
         setEvents(serverEvents)
       })
       .catch(() => {
-        // Fall back to local mocks if backend is unavailable
-        setEvents(MOCK_EVENTS)
+        setEvents((prev) => prev)
       })
   }, [API_BASE_URL])
 
-  useEffect(() => {
+  const fetchOverview = useCallback(() => {
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) return
-
     axios
       .get(`${API_BASE_URL}/api/events/overview`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -167,10 +166,23 @@ export function OrganizerDashboard({ user, onLogout }) {
           setOverview(res.data)
         }
       })
-      .catch(() => {
-        // keep last known overview
-      })
+      .catch(() => {})
   }, [API_BASE_URL])
+
+  useEffect(() => {
+    fetchEvents()
+    fetchOverview()
+  }, [API_BASE_URL, fetchEvents, fetchOverview])
+
+  // Reload data when switching organizer drawer tabs so each tab shows fresh data
+  useEffect(() => {
+    if (isFirstTabRender.current) {
+      isFirstTabRender.current = false
+      return
+    }
+    fetchEvents()
+    fetchOverview()
+  }, [activeTab, fetchEvents, fetchOverview])
 
   const handleOpenCreate = () => {
     setCreateError('')
@@ -362,7 +374,7 @@ export function OrganizerDashboard({ user, onLogout }) {
 
   const allEvents = useMemo(
     () =>
-      (events?.length ? events : MOCK_EVENTS).map((e) => {
+      (events || []).map((e) => {
         if (e.title) return e
         return {
           id: e.id,
@@ -384,7 +396,7 @@ export function OrganizerDashboard({ user, onLogout }) {
   )
 
   const scannerEvents = useMemo(() => {
-    const base = events?.length ? events : []
+    const base = events || []
     // Scanner should show approved events, and those marked completed after scanning.
     return base.filter((e) => e.status === 'approved' || e.status === 'completed')
   }, [events])
@@ -884,7 +896,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                   },
                   {
                     label: 'Total Registrations',
-                    value: String(overview.stats.totalScans ?? 0),
+                    value: String(overview.stats.totalRegistrations ?? 0),
                     icon: Users,
                     color: 'bg-emerald-50 text-emerald-600',
                   },
@@ -1285,6 +1297,14 @@ function TicketScannerPanel({
         reader.reset()
       } catch {
         // ignore
+      }
+      // Stop camera stream so the camera turns off when organizer clicks "Stop scanning"
+      if (videoEl?.srcObject && typeof MediaStream !== 'undefined') {
+        const stream = videoEl.srcObject
+        if (stream instanceof MediaStream) {
+          stream.getTracks().forEach((track) => track.stop())
+        }
+        videoEl.srcObject = null
       }
     }
   }, [
