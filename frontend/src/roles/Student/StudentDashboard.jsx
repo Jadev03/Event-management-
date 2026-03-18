@@ -565,7 +565,11 @@ export function StudentDashboard({ user, onLogout }) {
               <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-black/5 shadow-sm">
                 <Calendar size={18} className="text-indigo-600" />
                 <span className="text-sm font-semibold text-slate-700">
-                  May 13, 2026
+                  {now.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
                 </span>
               </div>
             </div>
