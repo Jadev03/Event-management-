@@ -385,7 +385,7 @@ export function OrganizerDashboard({ user, onLogout }) {
             day: '2-digit',
             year: 'numeric',
           }),
-          registeredCount: 0,
+          registeredCount: e.registeredCount ?? 0,
           capacity: e.totalSeats,
           status: e.status ?? 'pending',
           thumbnailUrl: e.thumbnailUrl ?? '',
@@ -1044,6 +1044,14 @@ export function OrganizerDashboard({ user, onLogout }) {
               setLastScan={setLastScan}
               isPostingScan={isPostingScan}
               setIsPostingScan={setIsPostingScan}
+              onRecordedScan={() => {
+                fetchEvents()
+                fetchOverview()
+              }}
+              onMarkedCompleted={() => {
+                fetchEvents()
+                fetchOverview()
+              }}
             />
           )}
 
@@ -1210,6 +1218,8 @@ function TicketScannerPanel({
   setLastScan,
   isPostingScan,
   setIsPostingScan,
+  onRecordedScan,
+  onMarkedCompleted,
 }) {
   const [videoEl, setVideoEl] = useState(null)
 
@@ -1329,6 +1339,11 @@ function TicketScannerPanel({
         { rawQr: lastScan.text },
         { headers: { Authorization: `Bearer ${accessToken}` } },
       )
+      try {
+        onRecordedScan?.()
+      } catch {
+        // ignore
+      }
     } catch (e) {
       const msg =
         e?.response?.data?.message ||
@@ -1354,6 +1369,11 @@ function TicketScannerPanel({
       setScannerStatus('idle')
       setLastScan(null)
       setScannerError('Event marked as completed.')
+      try {
+        onMarkedCompleted?.()
+      } catch {
+        // ignore
+      }
     } catch (e) {
       const msg =
         e?.response?.data?.message ||
@@ -1405,6 +1425,8 @@ function TicketScannerPanel({
                     e.status === 'completed'
                       ? 'bg-slate-50 text-slate-600 border-slate-200'
                       : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                  const registered = Number(e.registeredCount ?? 0)
+                  const scanned = Number(e.scannedCount ?? 0)
 
                   return (
                     <button
@@ -1436,6 +1458,17 @@ function TicketScannerPanel({
                               year: 'numeric',
                             })}{' '}
                             • {e.time}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Scanned{' '}
+                            <span className="font-semibold text-slate-700">
+                              {scanned}
+                            </span>
+                            {' / '}
+                            Registered{' '}
+                            <span className="font-semibold text-slate-700">
+                              {registered}
+                            </span>
                           </p>
                         </div>
                         <span

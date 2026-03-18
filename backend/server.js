@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const eventRoutes = require('./routes/event.routes');
 const facultyRoutes = require('./routes/faculty.routes');
+const { seedIfEmpty } = require('./seeds/seedIfEmpty');
 const {
   authenticate,
   requireAdmin,
@@ -37,8 +38,15 @@ const MONGODB_URI =
 
 mongoose
   .connect(MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     logger.info('Connected to MongoDB');
+    try {
+      if (process.env.SEED_ON_EMPTY_DB !== 'false') {
+        await seedIfEmpty();
+      }
+    } catch (e) {
+      logger.error('Seed-if-empty failed', { message: e?.message });
+    }
   })
   .catch((err) => {
     logger.error('Error connecting to MongoDB', { message: err.message });

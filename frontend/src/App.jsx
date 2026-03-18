@@ -6,7 +6,6 @@ import { AdminDashboard } from './roles/Admin/AdminDashboard.jsx'
 import { FacultyCoordinatorDashboard } from './roles/FacultyCoordinator/FacultyCoordinatorDashboard.jsx'
 import { OrganizerDashboard } from './roles/Organizer/OrganizerDashboard.jsx'
 import { StudentDashboard } from './roles/Student/StudentDashboard.jsx'
-import { users as baseUsers } from './data/users.js'
 
 const MAX_FAILED_ATTEMPTS = 5
 const ATTEMPT_WINDOW_MINUTES = 10
@@ -31,7 +30,7 @@ const AppContent = () => {
   const [currentUser, setCurrentUser] = useState(null)
   const [error, setError] = useState('')
 
-  const [extraUsers, setExtraUsers] = useState([])
+  const [adminUsers, setAdminUsers] = useState([])
 
   // Simple in-memory security analytics for admin (pre-seeded with dummy failed attempts)
   const [loginAttempts, setLoginAttempts] = useState(DUMMY_FAILED_ATTEMPTS)
@@ -54,6 +53,32 @@ const AppContent = () => {
       localStorage.removeItem('currentUser')
     }
   }, [])
+
+  // Admin: always use real backend users (seeded if DB is empty)
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'admin') return
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) return
+
+    axios
+      .get(`${API_BASE_URL}/api/admin/users`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        const items = res.data?.users ?? []
+        setAdminUsers(
+          items.map((u) => ({
+            id: u.id,
+            email: u.email,
+            username: u.name,
+            role: u.role,
+          })),
+        )
+      })
+      .catch(() => {
+        // keep current state
+      })
+  }, [currentUser])
 
   const recordLoginAttempt = (email, success) => {
     const normalizedEmail = email.trim().toLowerCase()
@@ -246,26 +271,45 @@ const AppContent = () => {
     return <Login onLogin={handleLogin} error={error} />
   }
 
-  const allUsers = [...baseUsers, ...extraUsers]
-
-  const handleCreateUser = ({ email, username, password, role }) => {
-    const normalEmail = email.trim().toLowerCase()
-    const exists = allUsers.some(
-      (u) => u.email.toLowerCase() === normalEmail,
-    )
-    if (exists) {
-      alert('A user with this email already exists.')
+  const handleCreateUser = async ({ email, username, password, role }) => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      alert('You are not logged in.')
       return null
     }
 
-    const newUser = {
-      email: normalEmail,
-      password,
-      username,
-      role,
+    try {
+      const res = await axios.post(
+        `${API_BASE_URL}/api/admin/users`,
+        { name: username, email, role, password },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      const created = res.data?.user
+      const generatedPassword = res.data?.generatedPassword
+      if (created?.email) {
+        setAdminUsers((prev) => [
+          {
+            id: created.id,
+            email: created.email,
+            username: created.name,
+            role: created.role,
+          },
+          ...prev,
+        ])
+      }
+
+      return created
+        ? {
+            email: created.email,
+            username: created.name,
+            role: created.role,
+            generatedPassword: generatedPassword || password,
+          }
+        : null
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Unable to create user.')
+      return null
     }
-    setExtraUsers((prev) => [...prev, newUser])
-    return newUser
   }
 
   const securityProps = {
@@ -293,7 +337,7 @@ const AppContent = () => {
       return (
         <AdminDashboard
           {...commonProps}
-          users={allUsers}
+          users={adminUsers}
           onCreateUser={handleCreateUser}
         />
       )

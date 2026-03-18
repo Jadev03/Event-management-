@@ -102,7 +102,7 @@ export function AdminDashboard({
     return pwd
   }
 
-  const handleSubmitNewUser = (e) => {
+  const handleSubmitNewUser = async (e) => {
     e.preventDefault()
     if (!newName.trim() || !newEmail.trim()) {
       alert('Please enter a full name and email.')
@@ -110,7 +110,7 @@ export function AdminDashboard({
     }
     const password = generatePassword()
     if (!onCreateUser) return
-    const created = onCreateUser({
+    const created = await onCreateUser({
       email: newEmail,
       username: newName,
       password,
@@ -118,7 +118,8 @@ export function AdminDashboard({
     })
     if (!created) return
 
-    setLastCreatedUser({ ...created, generatedPassword: password })
+    const effectivePassword = created.generatedPassword || password
+    setLastCreatedUser({ ...created, generatedPassword: effectivePassword })
     setNewName('')
     setNewEmail('')
 
@@ -127,7 +128,7 @@ export function AdminDashboard({
       `Hi ${created.username},\n\n` +
         `An account has been created for you on the UniEvent system.\n\n` +
         `Email: ${created.email}\n` +
-        `Temporary password: ${password}\n\n` +
+        `Temporary password: ${effectivePassword}\n\n` +
         `Please sign in and change your password as soon as possible.\n\n` +
         `Best regards,\n` +
         `Event Management Team`,

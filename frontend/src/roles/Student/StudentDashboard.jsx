@@ -303,21 +303,7 @@ export function StudentDashboard({ user, onLogout }) {
     [],
   )
 
-  // Restore registrations from localStorage on first load
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('studentRegistrations')
-      if (!stored) return
-      const parsed = JSON.parse(stored)
-      if (parsed && typeof parsed === 'object') {
-        setRegistrations(parsed)
-      }
-    } catch {
-      localStorage.removeItem('studentRegistrations')
-    }
-  }, [])
-
-  // Load registrations from backend so counts persist and match server
+  // Load registrations from backend so they match server (no local random state)
   useEffect(() => {
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
@@ -334,23 +320,12 @@ export function StudentDashboard({ user, onLogout }) {
           return acc
         }, {})
 
-        setRegistrations((prev) => {
-          const merged = { ...prev, ...fromServer }
-          try {
-            localStorage.setItem(
-              'studentRegistrations',
-              JSON.stringify(merged),
-            )
-          } catch {
-            // ignore persistence errors
-          }
-          return merged
-        })
+        setRegistrations(fromServer)
       })
       .catch(() => {
-        // If this fails, we still fall back to localStorage-only registrations.
+        // Keep current state (UI will still show Browse Events)
       })
-  }, [])
+  }, [API_BASE_URL])
 
   const handleRegisterForEvent = async (event) => {
     const ok = window.confirm(
@@ -377,15 +352,9 @@ export function StudentDashboard({ user, onLogout }) {
       )
 
       setRegistrations((prev) => {
-        const current = prev[event.id] || 0
         const next = {
           ...prev,
-          [event.id]: current + 1,
-        }
-        try {
-          localStorage.setItem('studentRegistrations', JSON.stringify(next))
-        } catch {
-          // ignore persistence errors
+          [event.id]: 1,
         }
         return next
       })

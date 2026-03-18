@@ -118,6 +118,30 @@ const listMyEvents = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    const eventIds = items.map((e) => e._id);
+
+    const registrationsAgg =
+      eventIds.length === 0
+        ? []
+        : await Registration.aggregate([
+            { $match: { eventId: { $in: eventIds } } },
+            { $group: { _id: '$eventId', registrations: { $sum: 1 } } },
+          ]);
+    const registrationsByEventId = new Map(
+      registrationsAgg.map((x) => [String(x._id), x.registrations])
+    );
+
+    const attendanceAgg =
+      eventIds.length === 0
+        ? []
+        : await Attendance.aggregate([
+            { $match: { eventId: { $in: eventIds } } },
+            { $group: { _id: '$eventId', scans: { $sum: 1 } } },
+          ]);
+    const scansByEventId = new Map(
+      attendanceAgg.map((x) => [String(x._id), x.scans])
+    );
+
     return res.status(200).json({
       events: items.map((e) => ({
         id: e._id.toString(),
@@ -128,6 +152,8 @@ const listMyEvents = async (req, res) => {
         time: e.time,
         place: e.place,
         totalSeats: e.totalSeats,
+        registeredCount: registrationsByEventId.get(String(e._id)) || 0,
+        scannedCount: scansByEventId.get(String(e._id)) || 0,
         thumbnailUrl: e.thumbnailUrl,
         status: e.status,
         createdAt: e.createdAt,

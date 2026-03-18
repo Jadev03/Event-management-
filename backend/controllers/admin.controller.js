@@ -17,7 +17,7 @@ const generateRandomPassword = (length = 8) => {
 
 const createUserByAdmin = async (req, res) => {
   try {
-    const { name, email, role } = req.body || {};
+    const { name, email, role, password } = req.body || {};
 
     if (!name || !email || !role) {
       return res
@@ -41,7 +41,10 @@ const createUserByAdmin = async (req, res) => {
         .json({ message: 'A user with this email already exists' });
     }
 
-    const plainPassword = generateRandomPassword(8);
+    const plainPassword =
+      typeof password === 'string' && password.trim()
+        ? password.trim()
+        : generateRandomPassword(8);
     const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     const user = await User.create({
@@ -60,6 +63,7 @@ const createUserByAdmin = async (req, res) => {
 
     return res.status(201).json({
       message: 'User created successfully',
+      generatedPassword: plainPassword,
       user: {
         id: user._id.toString(),
         name: user.name,
@@ -73,7 +77,31 @@ const createUserByAdmin = async (req, res) => {
   }
 };
 
+const listUsers = async (req, res) => {
+  try {
+    const users = await User.find({})
+      .sort({ createdAt: -1 })
+      .select('name email role createdAt updatedAt')
+      .lean();
+
+    return res.status(200).json({
+      users: (users || []).map((u) => ({
+        id: u._id.toString(),
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        createdAt: u.createdAt,
+        updatedAt: u.updatedAt,
+      })),
+    });
+  } catch (error) {
+    logger.error('Error listing users', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createUserByAdmin,
+  listUsers,
 };
 
