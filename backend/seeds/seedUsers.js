@@ -13,9 +13,24 @@ const upsertUserByEmail = async ({ email, password, name, role }) => {
   const normalizedEmail = String(email).trim().toLowerCase();
   const existing = await User.findOne({ email: normalizedEmail }).lean();
 
+  const overwriteExistingUsers =
+    process.env.SEED_OVERWRITE_EXISTING_USERS === 'true';
+
   if (existing) {
-    // Skip existing users (do not overwrite password).
-    return { action: 'skipped', email: normalizedEmail };
+    if (!overwriteExistingUsers) {
+      // Skip existing users (do not overwrite password).
+      return { action: 'skipped', email: normalizedEmail };
+    }
+
+    // Overwrite password + profile fields for deterministic dev seeding.
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    await User.updateOne(
+      { email: normalizedEmail },
+      { $set: { password: hashedPassword, name, role } },
+    );
+    return { action: 'updated', email: normalizedEmail };
   }
 
   const saltRounds = 10;
@@ -63,13 +78,15 @@ const seedUsers = async () => {
 
     let inserted = 0;
     let skipped = 0;
+    let updated = 0;
     for (const u of plainUsers) {
       const result = await upsertUserByEmail(u);
       if (result.action === 'inserted') inserted += 1;
       else skipped += 1;
+      if (result.action === 'updated') updated += 1;
     }
 
-    logger.info('Seed users done', { inserted, skipped });
+    logger.info('Seed users done', { inserted, skipped, updated });
 
     await mongoose.disconnect();
     logger.info('Disconnected from MongoDB after seeding users');

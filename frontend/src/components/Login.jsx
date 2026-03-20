@@ -80,6 +80,19 @@ export function Login({ onLogin, error }) {
             )}
           </div>
 
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setEmail('student1@university.ac.lk')
+                setPassword('student123')
+              }}
+              className="px-3 py-2 rounded-2xl border border-indigo-100 text-indigo-700 text-sm font-bold hover:bg-indigo-50 transition-colors"
+            >
+              Login as Student
+            </button>
+          </div>
+
           <button
             type="submit"
             className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98]"

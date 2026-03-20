@@ -231,7 +231,15 @@ const AppContent = () => {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(err)
-      setError('Unable to connect to server. Please try again later.')
+      const responseMessage =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        (typeof err?.response?.data === 'string' ? err.response.data : null)
+
+      setError(
+        responseMessage ||
+          'Unable to connect to server. Please try again later.',
+      )
       setCurrentUser(null)
       recordLoginAttempt(trimmedEmail, false)
     }

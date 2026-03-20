@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock,
   LayoutDashboard,
+  Lock,
   MapPin,
   Menu,
   QrCode,
