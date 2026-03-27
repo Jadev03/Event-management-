@@ -24,6 +24,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
 import { ChangePasswordModal } from '../../components/ChangePasswordModal.jsx'
+import { isDemoMode } from '../../demoMode.js'
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
@@ -148,8 +149,10 @@ function useStudentEventsData() {
   useEffect(() => {
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
-      setLoadError('You are not logged in.')
-      setEvents([])
+      if (!isDemoMode) {
+        setLoadError('You are not logged in.')
+        setEvents([])
+      }
       return
     }
 
@@ -213,7 +216,9 @@ export function StudentDashboard({ user, onLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
-  const [registrations, setRegistrations] = useState({})
+  const [registrations, setRegistrations] = useState(() =>
+    isDemoMode ? { e1: 1, e2: 1 } : {},
+  )
 
   const now = useMemo(() => new Date(), [])
 
@@ -335,6 +340,11 @@ export function StudentDashboard({ user, onLogout }) {
       `Are you sure you want to register for "${event.title}"?`,
     )
     if (!ok) return
+
+    if (isDemoMode) {
+      setRegistrations((prev) => ({ ...prev, [event.id]: 1 }))
+      return
+    }
 
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
@@ -952,7 +962,7 @@ function StudentTicketsSection({ user, events }) {
         userName: user.username,
         status: 'valid',
       })),
-    [user.username],
+    [events, user.username],
   )
 
   const cardRefs = useRef({})

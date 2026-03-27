@@ -1,33 +1,47 @@
 
-## Frontend (React + Vite)
+# Event Management (Full stack)
 
-### Prerequisites
-- **Node.js**: 20.19+ (recommended) or 22.12+
+This repo contains:
+- `frontend/`: React + Vite client
+- `backend/`: Node.js + Express + MongoDB API
 
-### Install & run
+## Prerequisites
+- **Node.js**: 20.19+ (recommended) or 22+
+- **npm**: comes with Node
+- **MongoDB**: required only for the backend (local or remote)
+
+## Quickstart (demo mode, no backend)
+Use this when you just want to run the UI with built-in demo accounts (no API calls).
+
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev:demo
 ```
 
-Then open the URL shown in the terminal (usually `http://localhost:5173/`).
+Open the URL shown in the terminal (usually `http://localhost:5173/`).
 
-## Backend (Node.js + Express + MongoDB)
+### Demo accounts
+These are defined in `frontend/src/data/users.js`:
 
-### Prerequisites
-- **Node.js**: 20.19+ (recommended) or 22.12+
-- **MongoDB**: running locally (default connection is `mongodb://localhost:27017/event_management`) or provide your own `MONGODB_URI`
+| role | email | password |
+| --- | --- | --- |
+| student | student1@university.ac.lk | student123 |
+| facultyCoordinator | faculty1@university.ac.lk | faculty123 |
+| organizer | organizer1@university.ac.lk | organizer123 |
+| admin | admin1@university.ac.lk | admin123 |
 
-### Install (first time)
+## Run full stack (backend + frontend)
+
+### 1) Backend setup
 ```bash
 cd backend
 npm install
 ```
 
-### Environment variables
+#### Backend environment variables
 Create `backend/.env` (or update it) with at least:
-- `MONGODB_URI` (optional if using the default)
+- `MONGODB_URI` (optional if using the default below)
 - `JWT_SECRET` (recommended)
 - `REFRESH_TOKEN_SECRET` (recommended)
 
@@ -40,42 +54,47 @@ JWT_EXPIRES_IN=1h
 REFRESH_TOKEN_EXPIRES_IN=7d
 ```
 
-### Seed the database (first time)
-Run these once when setting up a fresh database:
-
+#### Seed the database (first time)
 ```bash
 cd backend
 
-# Seed users (student/facultyCoordinator/organizer/admin)
-npm run seed:users
-
-# Seed other data (optional)
-npm run seed:events
-npm run seed:faculty
-
-# Or run everything:
+# Seeds users + other sample data
 npm run seed:all
 ```
 
-### Default users (created by `npm run seed:users`)
-Use these accounts to log in after seeding:
-
-| role | name | email | password |
-| --- | --- | --- | --- |
-| student | Student One | student1@university.ac.lk | student123 |
-| facultyCoordinator | Faculty Coordinator | faculty1@university.ac.lk | faculty123 |
-| organizer | Event Organizer | organizer1@university.ac.lk | organizer123 |
-| admin | System Admin | admin1@university.ac.lk | admin123 |
-
-### Run the backend
+You can also run seeds individually:
 ```bash
 cd backend
+npm run seed:users
+npm run seed:events
+npm run seed:faculty
+```
 
-# Development (nodemon)
+#### Start the backend
+```bash
+cd backend
 npm run dev
-
-# Production
-npm start
 ```
 
 Backend default URL: `http://localhost:5000`
+
+### 2) Frontend setup
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend dev URL (usually): `http://localhost:5173/`
+
+## Common scripts
+### Frontend (`frontend/`)
+- `npm run dev`: run client (API-enabled)
+- `npm run dev:demo`: run client in demo mode (no API calls)
+- `npm run build`: production build
+- `npm run preview`: preview the production build
+
+### Backend (`backend/`)
+- `npm run dev`: run API with nodemon
+- `npm start`: run API (production)
+- `npm run seed:all`: seed users + sample data

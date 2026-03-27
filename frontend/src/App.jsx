@@ -6,6 +6,8 @@ import { AdminDashboard } from './roles/Admin/AdminDashboard.jsx'
 import { FacultyCoordinatorDashboard } from './roles/FacultyCoordinator/FacultyCoordinatorDashboard.jsx'
 import { OrganizerDashboard } from './roles/Organizer/OrganizerDashboard.jsx'
 import { StudentDashboard } from './roles/Student/StudentDashboard.jsx'
+import { users as demoUserSeeds } from './data/users.js'
+import { isDemoMode } from './demoMode.js'
 
 const MAX_FAILED_ATTEMPTS = 5
 const ATTEMPT_WINDOW_MINUTES = 10
@@ -37,6 +39,8 @@ const AppContent = () => {
   const [lockedEmails, setLockedEmails] = useState({})
   const [deactivatedEmails, setDeactivatedEmails] = useState({})
 
+  const hasBackendToken = Boolean(localStorage.getItem('accessToken'))
+
   // On first load, try to restore user from localStorage so refresh keeps user logged in.
   useEffect(() => {
     try {
@@ -54,9 +58,20 @@ const AppContent = () => {
     }
   }, [])
 
-  // Admin: always use real backend users (seeded if DB is empty)
+  // Admin: real API users, or demo seed list when presenting without a server
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'admin') return
+    if (isDemoMode && !hasBackendToken) {
+      setAdminUsers(
+        demoUserSeeds.map((u, i) => ({
+          id: `demo-seed-${i}`,
+          email: u.email,
+          username: u.username,
+          role: u.role,
+        })),
+      )
+      return
+    }
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) return
 
@@ -78,7 +93,7 @@ const AppContent = () => {
       .catch(() => {
         // keep current state
       })
-  }, [currentUser])
+  }, [currentUser, hasBackendToken])
 
   const recordLoginAttempt = (email, success) => {
     const normalizedEmail = email.trim().toLowerCase()
@@ -165,6 +180,72 @@ const AppContent = () => {
     const trimmedEmail = email.trim().toLowerCase()
     const trimmedPassword = password.trim()
 
+    if (isDemoMode) {
+      try {
+        const response = await axios.post(
+          `${API_BASE_URL}/api/auth/login`,
+          {
+            email: trimmedEmail,
+            password: trimmedPassword,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        )
+
+        const { token, refreshToken, user } = response.data || {}
+        if (user) {
+          if (token) localStorage.setItem('accessToken', token)
+          if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
+          const mappedUser = {
+            id: user.id,
+            email: user.email,
+            username: user.name,
+            role: user.role,
+          }
+          recordLoginAttempt(trimmedEmail, true)
+          setCurrentUser(mappedUser)
+          try {
+            localStorage.setItem('currentUser', JSON.stringify(mappedUser))
+          } catch {
+            // non-fatal
+          }
+          setError('')
+          return
+        }
+      } catch {
+        // If backend login fails in demo mode, fall back to dummy users.
+      }
+      const match = demoUserSeeds.find(
+        (u) =>
+          u.email.trim().toLowerCase() === trimmedEmail &&
+          u.password === trimmedPassword,
+      )
+      if (!match) {
+        setError('Invalid email or password.')
+        setCurrentUser(null)
+        recordLoginAttempt(trimmedEmail, false)
+        return
+      }
+      const mappedUser = {
+        id: `demo-${match.role}-${trimmedEmail}`,
+        email: match.email,
+        username: match.username,
+        role: match.role,
+      }
+      recordLoginAttempt(trimmedEmail, true)
+      setCurrentUser(mappedUser)
+      try {
+        localStorage.setItem('currentUser', JSON.stringify(mappedUser))
+      } catch {
+        // non-fatal
+      }
+      setError('')
+      return
+    }
+
     if (deactivatedEmails[trimmedEmail]) {
       setError(
         'Your account has been deactivated. Please contact the administrator.',
@@ -246,6 +327,13 @@ const AppContent = () => {
   }
 
   const handleLogout = async () => {
+    if (isDemoMode) {
+      localStorage.removeItem('currentUser')
+      setCurrentUser(null)
+      setError('')
+      return
+    }
+
     const accessToken = localStorage.getItem('accessToken')
     const refreshToken = localStorage.getItem('refreshToken')
 
@@ -280,6 +368,30 @@ const AppContent = () => {
   }
 
   const handleCreateUser = async ({ email, username, password, role }) => {
+    if (isDemoMode) {
+      const created = {
+        id: `demo-new-${Date.now()}`,
+        email: email.trim().toLowerCase(),
+        name: username.trim(),
+        role,
+      }
+      setAdminUsers((prev) => [
+        {
+          id: created.id,
+          email: created.email,
+          username: created.name,
+          role: created.role,
+        },
+        ...prev,
+      ])
+      return {
+        email: created.email,
+        username: created.name,
+        role: created.role,
+        generatedPassword: password,
+      }
+    }
+
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
       alert('You are not logged in.')

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { ChangePasswordModal } from '../../components/ChangePasswordModal.jsx'
+import { isDemoMode } from '../../demoMode.js'
 import {
   XAxis,
   YAxis,
@@ -97,6 +98,44 @@ const sidebarItems = [
   { id: 'events', label: 'Browse Events', icon: Calendar },
 ]
 
+const FACULTY_DEMO_OVERVIEW = {
+  stats: {
+    totalEvents: 12,
+    pendingApprovals: 2,
+    approvedEvents: 8,
+    rejectedEvents: 1,
+    completedEvents: 3,
+  },
+  trends: [
+    { name: 'Jan', value: 4 },
+    { name: 'Feb', value: 6 },
+    { name: 'Mar', value: 5 },
+    { name: 'Apr', value: 8 },
+    { name: 'May', value: 7 },
+    { name: 'Jun', value: 9 },
+  ],
+}
+
+const FACULTY_DEMO_NOTIFICATIONS = [
+  {
+    id: 'demo-n1',
+    title: 'Pending approval',
+    message:
+      'Demo data. With the API connected, faculty notifications will appear here.',
+    read: false,
+    createdAt: new Date().toISOString(),
+    dateLabel: 'Today',
+  },
+  {
+    id: 'demo-n2',
+    title: 'Event approved',
+    message: 'Research Symposium was approved.',
+    read: true,
+    createdAt: new Date().toISOString(),
+    dateLabel: 'Yesterday',
+  },
+]
+
 function cn(...inputs) {
   return inputs.filter(Boolean).join(' ')
 }
@@ -109,17 +148,23 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
-  const [notifications, setNotifications] = useState([])
-  const [overview, setOverview] = useState({
-    stats: {
-      totalEvents: 0,
-      pendingApprovals: 0,
-      approvedEvents: 0,
-      rejectedEvents: 0,
-      completedEvents: 0,
-    },
-    trends: [],
-  })
+  const [notifications, setNotifications] = useState(() =>
+    isDemoMode ? FACULTY_DEMO_NOTIFICATIONS : [],
+  )
+  const [overview, setOverview] = useState(() =>
+    isDemoMode
+      ? FACULTY_DEMO_OVERVIEW
+      : {
+          stats: {
+            totalEvents: 0,
+            pendingApprovals: 0,
+            approvedEvents: 0,
+            rejectedEvents: 0,
+            completedEvents: 0,
+          },
+          trends: [],
+        },
+  )
   const unreadCount = (notifications || []).filter((n) => !n.read).length
 
   const [pendingEvents, setPendingEvents] = useState([])
@@ -163,6 +208,13 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
 
   const loadPending = async () => {
     const accessToken = localStorage.getItem('accessToken')
+    if (isDemoMode && !accessToken) {
+      setPendingError('')
+      setPendingEvents([])
+      setPendingStatus('idle')
+      return
+    }
+
     if (!accessToken) {
       setPendingError('You are not logged in.')
       setPendingEvents([])
@@ -194,6 +246,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
   }, [activeTab])
 
   const approve = async (eventId) => {
+    if (isDemoMode) return
     if (!eventId) return
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
@@ -229,6 +282,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
   }
 
   const reject = async () => {
+    if (isDemoMode) return
     const ev = rejectModal.event
     if (!ev?.id) return
     const accessToken = localStorage.getItem('accessToken')
@@ -731,6 +785,8 @@ function FacultyEventsSection() {
   const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
+    if (isDemoMode) return
+
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
       setLoadError('You are not logged in.')

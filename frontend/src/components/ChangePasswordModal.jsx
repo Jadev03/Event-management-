@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import axios from 'axios'
 import { X } from 'lucide-react'
+import { isDemoMode } from '../demoMode.js'
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
@@ -44,6 +45,11 @@ export function ChangePasswordModal({ open, onClose }) {
     }
 
     const accessToken = localStorage.getItem('accessToken')
+    if (isDemoMode && !accessToken) {
+      close()
+      return
+    }
+
     if (!accessToken) {
       setError('You are not logged in.')
       return

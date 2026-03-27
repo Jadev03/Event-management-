@@ -11,6 +11,8 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
+import { isDemoMode } from '../demoMode.js'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
@@ -69,6 +71,10 @@ export function Login({ onLogin, error }) {
   }
 
   const handleRequestOtp = async () => {
+    if (isDemoMode) {
+      setRecoverError('Unable to send verification code right now.')
+      return
+    }
     const trimmed = recoveryEmail.trim().toLowerCase()
     if (!trimmed) {
       setRecoverError('Please enter your email.')
@@ -522,19 +528,21 @@ export function Login({ onLogin, error }) {
           </button>
 
           <div className="flex justify-center">
-            <button
-              type="button"
-              className="text-sm font-medium text-indigo-600 hover:underline"
-              onClick={() => {
-                setFlow('recover')
-                setRecoverStep('email')
-                setRecoverError('')
-                setRecoverSuccess('')
-                setRecoveryEmail(email.trim())
-              }}
-            >
-              Forgot password?
-            </button>
+            {isDemoMode ? null : (
+              <button
+                type="button"
+                className="text-sm font-medium text-indigo-600 hover:underline"
+                onClick={() => {
+                  setFlow('recover')
+                  setRecoverStep('email')
+                  setRecoverError('')
+                  setRecoverSuccess('')
+                  setRecoveryEmail(email.trim())
+                }}
+              >
+                Forgot password?
+              </button>
+            )}
           </div>
         </form>
       </motion.div>

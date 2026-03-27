@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { ChangePasswordModal } from '../../components/ChangePasswordModal.jsx'
+import { isDemoMode } from '../../demoMode.js'
 import {
   Bar,
   BarChart,
@@ -75,6 +76,25 @@ const MOCK_EVENTS = [
     status: 'completed',
   },
 ]
+
+const DEMO_ORGANIZER_SERVER_EVENTS = MOCK_EVENTS.map((e, i) => ({
+  id: e.id,
+  name: e.title,
+  description: 'Demo event for client presentation.',
+  type: i % 2 === 0 ? 'academic' : 'workshop',
+  date: ['2026-05-20', '2026-06-02', '2026-06-15', '2026-05-28', '2026-06-05'][i % 5],
+  time: ['10:00', '08:00', '13:00', '14:00', '09:30'][i % 5],
+  place: ['Innovation Lab', 'Main Stadium', 'Conference Hall B', 'Lab 3', 'Auditorium'][i % 5],
+  totalSeats: e.capacity,
+  status: e.status,
+  registeredCount: e.registeredCount,
+  scannedCount: Math.min(
+    e.registeredCount,
+    Math.max(0, Math.floor(e.registeredCount * 0.25)),
+  ),
+  thumbnailUrl: '',
+  createdBy: { name: 'Demo Organizer' },
+}))
 
 export function OrganizerDashboard({ user, onLogout }) {
   const API_BASE_URL =
@@ -140,6 +160,13 @@ export function OrganizerDashboard({ user, onLogout }) {
 
   const fetchEvents = useCallback(() => {
     const accessToken = localStorage.getItem('accessToken')
+    if (isDemoMode && !accessToken) {
+      setEvents((prev) =>
+        prev.length ? prev : DEMO_ORGANIZER_SERVER_EVENTS,
+      )
+      return
+    }
+
     if (!accessToken) {
       setEvents([])
       return
@@ -159,6 +186,30 @@ export function OrganizerDashboard({ user, onLogout }) {
 
   const fetchOverview = useCallback(() => {
     const accessToken = localStorage.getItem('accessToken')
+    if (isDemoMode && !accessToken) {
+      setOverview({
+        stats: {
+          totalEvents: 5,
+          approvedEvents: 3,
+          pendingApprovals: 1,
+          totalScans: 240,
+          avgAttendancePct: 68,
+          totalRegistrations: 1035,
+        },
+        statusDistribution: [
+          { name: 'Approved', value: 3 },
+          { name: 'Pending', value: 1 },
+          { name: 'Completed', value: 1 },
+          { name: 'Rejected', value: 0 },
+        ],
+        topEvents: MOCK_EVENTS.slice(0, 4).map((ev) => ({
+          name: ev.title.length > 22 ? `${ev.title.slice(0, 20)}…` : ev.title,
+          scans: Math.floor(ev.registeredCount * 0.2),
+        })),
+      })
+      return
+    }
+
     if (!accessToken) return
     axios
       .get(`${API_BASE_URL}/api/events/overview`, {
@@ -274,6 +325,31 @@ export function OrganizerDashboard({ user, onLogout }) {
     }
 
     setIsUpdating(true)
+
+    if (isDemoMode && !accessToken) {
+      const id = editingEvent.id
+      const updatedLocal = {
+        ...editingEvent,
+        id,
+        name: editForm.name.trim(),
+        description: editForm.description.trim(),
+        type: editForm.type,
+        date: editForm.date,
+        time: editForm.time,
+        place: editForm.place.trim(),
+        totalSeats: Number.parseInt(editForm.seats, 10),
+        thumbnailUrl: editForm.thumbnail.trim(),
+        status: editForm.status,
+      }
+      setEvents((prev) =>
+        prev.map((ev) => (ev.id === id ? updatedLocal : ev)),
+      )
+      setIsEditOpen(false)
+      setEditingEvent(null)
+      setIsUpdating(false)
+      return
+    }
+
     axios
       .put(
         `${API_BASE_URL}/api/events/${editingEvent.id}`,
@@ -334,6 +410,39 @@ export function OrganizerDashboard({ user, onLogout }) {
     }
 
     setIsSaving(true)
+
+    if (isDemoMode && !accessToken) {
+      const created = {
+        id: `demo-local-${Date.now()}`,
+        name: form.name.trim(),
+        description: form.description.trim(),
+        type: form.type,
+        date: form.date,
+        time: form.time,
+        place: form.place.trim(),
+        totalSeats: Number.parseInt(form.seats, 10),
+        thumbnailUrl: form.thumbnail.trim(),
+        status: 'pending',
+        registeredCount: 0,
+        scannedCount: 0,
+        createdBy: { name: user?.username ?? 'Organizer' },
+      }
+      setEvents((prev) => [created, ...prev])
+      setForm({
+        name: '',
+        description: '',
+        type: 'academic',
+        date: '',
+        time: '',
+        place: '',
+        seats: '',
+        thumbnail: '',
+      })
+      setIsCreateOpen(false)
+      setIsSaving(false)
+      return
+    }
+
     axios
       .post(
         `${API_BASE_URL}/api/events`,
@@ -1069,6 +1178,13 @@ export function OrganizerDashboard({ user, onLogout }) {
                 fetchEvents()
                 fetchOverview()
               }}
+              onDemoMarkCompleted={(eventId) => {
+                setEvents((prev) =>
+                  prev.map((ev) =>
+                    ev.id === eventId ? { ...ev, status: 'completed' } : ev,
+                  ),
+                )
+              }}
             />
           )}
 
@@ -1237,6 +1353,7 @@ function TicketScannerPanel({
   setIsPostingScan,
   onRecordedScan,
   onMarkedCompleted,
+  onDemoMarkCompleted,
 }) {
   const [videoEl, setVideoEl] = useState(null)
 
@@ -1349,6 +1466,12 @@ function TicketScannerPanel({
     setIsPostingScan(true)
     setScannerError('')
     try {
+      if (isDemoMode) {
+        setScannerError(
+          'Check-in recorded.',
+        )
+        return
+      }
       const accessToken = localStorage.getItem('accessToken')
       if (!accessToken) throw new Error('not_logged_in')
       await axios.post(
@@ -1376,6 +1499,13 @@ function TicketScannerPanel({
     if (!scannerEventId) return
     setScannerError('')
     try {
+      if (isDemoMode) {
+        setScannerStatus('idle')
+        setLastScan(null)
+        setScannerError('Event marked as completed.')
+        onDemoMarkCompleted?.(scannerEventId)
+        return
+      }
       const accessToken = localStorage.getItem('accessToken')
       if (!accessToken) throw new Error('not_logged_in')
       await axios.put(
