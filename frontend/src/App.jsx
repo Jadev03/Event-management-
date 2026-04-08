@@ -22,6 +22,9 @@ const AppContent = () => {
 
   const [adminUsers, setAdminUsers] = useState([])
 
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
   // Client-side security analytics for admin (UI only, current session)
   const [loginAttempts, setLoginAttempts] = useState(DUMMY_FAILED_ATTEMPTS)
 
@@ -189,7 +192,7 @@ const AppContent = () => {
     }
   }
 
-  const handleLogout = async () => {
+  const performLogout = async () => {
     const accessToken = localStorage.getItem('accessToken')
     const refreshToken = localStorage.getItem('refreshToken')
 
@@ -218,6 +221,55 @@ const AppContent = () => {
       setError('')
     }
   }
+
+  const handleLogout = () => {
+    setIsLogoutConfirmOpen(true)
+  }
+
+  const LogoutConfirmModal = isLogoutConfirmOpen ? (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirm sign out"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !isLoggingOut) {
+          setIsLogoutConfirmOpen(false)
+        }
+      }}
+    >
+      <div className="w-full max-w-md rounded-[24px] bg-white border border-black/5 shadow-xl p-6">
+        <h3 className="text-lg font-bold text-slate-900">Are you sure?</h3>
+        <p className="text-sm text-slate-600 mt-2">
+          Are you sure you want to sign out?
+        </p>
+
+        <div className="mt-6 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            disabled={isLoggingOut}
+            onClick={() => setIsLogoutConfirmOpen(false)}
+            className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-60"
+          >
+            No
+          </button>
+          <button
+            type="button"
+            disabled={isLoggingOut}
+            onClick={async () => {
+              setIsLoggingOut(true)
+              await performLogout()
+              setIsLoggingOut(false)
+              setIsLogoutConfirmOpen(false)
+            }}
+            className="px-4 py-2 rounded-xl text-sm font-semibold border border-indigo-100 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-60"
+          >
+            {isLoggingOut ? 'Signing out…' : 'Yes, sign out'}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
 
   if (!currentUser) {
     return <Login onLogin={handleLogin} error={error} />
@@ -347,24 +399,43 @@ const AppContent = () => {
 
   switch (currentUser.role) {
     case 'student':
-      return <StudentDashboard {...commonProps} />
+      return (
+        <>
+          {LogoutConfirmModal}
+          <StudentDashboard {...commonProps} />
+        </>
+      )
     case 'facultyCoordinator':
-      return <FacultyCoordinatorDashboard {...commonProps} />
+      return (
+        <>
+          {LogoutConfirmModal}
+          <FacultyCoordinatorDashboard {...commonProps} />
+        </>
+      )
     case 'organizer':
-      return <OrganizerDashboard {...commonProps} />
+      return (
+        <>
+          {LogoutConfirmModal}
+          <OrganizerDashboard {...commonProps} />
+        </>
+      )
     case 'admin':
       return (
-        <AdminDashboard
-          {...commonProps}
-          users={adminUsers}
-          onCreateUser={handleCreateUser}
-          onUpdateUser={handleUpdateUser}
-          onDeleteUser={handleDeleteUser}
-        />
+        <>
+          {LogoutConfirmModal}
+          <AdminDashboard
+            {...commonProps}
+            users={adminUsers}
+            onCreateUser={handleCreateUser}
+            onUpdateUser={handleUpdateUser}
+            onDeleteUser={handleDeleteUser}
+          />
+        </>
       )
     default:
       return (
         <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center p-8">
+          {LogoutConfirmModal}
           <div className="bg-white border border-black/5 rounded-3xl shadow-xl shadow-indigo-100 p-8 max-w-lg w-full text-center">
             <p className="text-slate-700">
               Signed in as <strong>{currentUser.username}</strong> with unknown

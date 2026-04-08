@@ -86,6 +86,7 @@ export function AdminDashboard({
 
   const [roleFilter, setRoleFilter] = useState('all') // all | student | facultyCoordinator | organizer
   const [isRoleFilterOpen, setIsRoleFilterOpen] = useState(false)
+  const [userSearch, setUserSearch] = useState('')
 
   const [monthlyAnalytics, setMonthlyAnalytics] = useState([])
   const [monthlyStatus, setMonthlyStatus] = useState('idle') // idle | loading
@@ -210,6 +211,17 @@ export function AdminDashboard({
     if (roleFilter === 'all') return base
     return base.filter((u) => u?.role === roleFilter)
   }, [users, roleFilter])
+
+  const visibleUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase()
+    if (!q) return filteredUsers
+
+    return filteredUsers.filter((u) => {
+      const name = String(u?.username || '').toLowerCase()
+      const email = String(u?.email || '').toLowerCase()
+      return name.includes(q) || email.includes(q)
+    })
+  }, [filteredUsers, userSearch])
 
   const sidebarItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -357,14 +369,7 @@ export function AdminDashboard({
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="h-16 bg-white border-b border-black/5 flex items-center justify-between px-6 md:px-8 z-10">
-        <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-2xl w-[22rem] max-w-full border border-black/5">
-          <Search size={18} className="text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search users, events, or logs..."
-            className="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-400"
-          />
-        </div>
+        <div />
 
         <div className="flex items-center gap-5">
           <button
@@ -861,6 +866,8 @@ export function AdminDashboard({
                         <input
                           type="text"
                           placeholder="Search users..."
+                          value={userSearch}
+                          onChange={(e) => setUserSearch(e.target.value)}
                           className="pl-10 pr-4 py-2 bg-slate-50 border border-black/5 rounded-xl text-sm outline-none w-64"
                         />
                       </div>
@@ -939,7 +946,7 @@ export function AdminDashboard({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-black/5">
-                        {filteredUsers.map((entry) => {
+                        {visibleUsers.map((entry) => {
                           const isDeactivated = entry.isDeactivated
                           const statusLabel = isDeactivated ? 'Deactivated' : 'Active'
                           const statusClass = isDeactivated
