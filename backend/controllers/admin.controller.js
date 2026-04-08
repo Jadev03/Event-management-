@@ -101,6 +101,87 @@ const listUsers = async (req, res) => {
   }
 };
 
+const updateUserByAdmin = async (req, res) => {
+  try {
+    const userId = req.params?.id;
+    if (!userId) {
+      return res.status(400).json({ message: 'User id is required' });
+    }
+
+    const { name, email, role } = req.body || {};
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Requirement: admin edits Student/Organizer/Faculty Coordinator details.
+    if (user.role === 'admin') {
+      return res
+        .status(403)
+        .json({ message: 'Admin user details cannot be edited here' });
+    }
+
+    if (typeof name === 'string') {
+      const nextName = name.trim();
+      if (!nextName) {
+        return res.status(400).json({ message: 'Name cannot be empty' });
+      }
+      user.name = nextName;
+    }
+
+    if (typeof email === 'string') {
+      const nextEmail = email.trim();
+      if (!nextEmail) {
+        return res.status(400).json({ message: 'Email cannot be empty' });
+      }
+
+      const existing = await User.findOne({
+        email: nextEmail,
+        _id: { $ne: user._id },
+      }).lean();
+      if (existing) {
+        return res
+          .status(409)
+          .json({ message: 'A user with this email already exists' });
+      }
+
+      user.email = nextEmail;
+    }
+
+    if (typeof role === 'string') {
+      if (!USER_ROLES.includes(role)) {
+        return res.status(400).json({
+          message: `Invalid role. Allowed roles are: ${USER_ROLES.join(', ')}`,
+        });
+      }
+      if (role === 'admin') {
+        return res
+          .status(403)
+          .json({ message: 'Cannot change a user role to admin' });
+      }
+      user.role = role;
+    }
+
+    await user.save();
+
+    return res.status(200).json({
+      message: 'User updated successfully',
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+    });
+  } catch (error) {
+    logger.error('Error updating user by admin', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 const getMonthlyEventStatusAnalytics = async (req, res) => {
   try {
     const monthsBackRaw = Number.parseInt(req.query?.months || '6', 10);
@@ -193,6 +274,7 @@ const getMonthlyEventStatusAnalytics = async (req, res) => {
 module.exports = {
   createUserByAdmin,
   listUsers,
+  updateUserByAdmin,
   getMonthlyEventStatusAnalytics,
 };
 

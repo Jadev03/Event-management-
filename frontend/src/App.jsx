@@ -320,6 +320,43 @@ const AppContent = () => {
     }
   }
 
+  const handleUpdateUser = async (id, updates) => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      alert('You are not logged in.')
+      return null
+    }
+
+    try {
+      const res = await axios.put(
+        `${API_BASE_URL}/api/admin/users/${id}`,
+        updates,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+
+      const updated = res.data?.user
+      if (updated?.id) {
+        setAdminUsers((prev) =>
+          prev.map((u) =>
+            u.id === updated.id
+              ? {
+                  ...u,
+                  email: updated.email,
+                  username: updated.name,
+                  role: updated.role,
+                }
+              : u,
+          ),
+        )
+      }
+
+      return updated || null
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Unable to update user.')
+      return null
+    }
+  }
+
   const securityProps = {
     loginAttempts,
     lockedEmails,
@@ -347,6 +384,7 @@ const AppContent = () => {
           {...commonProps}
           users={adminUsers}
           onCreateUser={handleCreateUser}
+          onUpdateUser={handleUpdateUser}
         />
       )
     default:

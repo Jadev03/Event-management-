@@ -72,6 +72,7 @@ export function AdminDashboard({
   onToggleDeactivate,
   users = [],
   onCreateUser,
+  onUpdateUser,
 }) {
   const now = Date.now()
   const windowMs = ATTEMPT_WINDOW_MINUTES * 60 * 1000
@@ -85,9 +86,11 @@ export function AdminDashboard({
   const [newEmail, setNewEmail] = useState('')
   const [newRole, setNewRole] = useState('student')
   const [isCreatingUser, setIsCreatingUser] = useState(false)
-  const [roleOverrides, setRoleOverrides] = useState({})
-  const [editingEmail, setEditingEmail] = useState(null)
+  const [editingUserId, setEditingUserId] = useState(null)
+  const [editingName, setEditingName] = useState('')
+  const [editingEmail, setEditingEmail] = useState('')
   const [editingRole, setEditingRole] = useState('student')
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   const [monthlyAnalytics, setMonthlyAnalytics] = useState([])
   const [monthlyStatus, setMonthlyStatus] = useState('idle') // idle | loading
@@ -180,7 +183,6 @@ export function AdminDashboard({
     return users
       .map((u) => {
         const key = u.email.trim()
-        const effectiveRole = roleOverrides[key] ?? u.role
         const attemptsForUser = loginAttempts.filter((a) => a.email === key)
         const failedRecent = attemptsForUser.filter(
           (a) => !a.success && now - a.timestamp <= windowMs,
@@ -202,7 +204,7 @@ export function AdminDashboard({
         return {
           ...u,
           key,
-          role: effectiveRole,
+          role: u.role,
           failedRecent: failedRecent.length,
           totalFailed,
           lastAttempt,
@@ -927,7 +929,7 @@ export function AdminDashboard({
                           const statusClass = isDeactivated
                             ? 'bg-red-50 text-red-600 border-red-100'
                             : 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                          const isEditing = editingEmail === entry.email
+                          const isEditing = editingUserId === entry.id
 
                           return (
                             <tr
@@ -940,12 +942,35 @@ export function AdminDashboard({
                                     {entry.username.charAt(0)}
                                   </div>
                                   <div>
-                                    <p className="font-bold text-slate-900">
-                                      {entry.username}
-                                    </p>
-                                    <p className="text-xs text-slate-500">
-                                      {entry.email}
-                                    </p>
+                                    {isEditing ? (
+                                      <div className="flex flex-col gap-2">
+                                        <input
+                                          type="text"
+                                          value={editingName}
+                                          onChange={(e) => setEditingName(e.target.value)}
+                                          className="w-64 max-w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                          placeholder="Full name"
+                                        />
+                                        <input
+                                          type="email"
+                                          value={editingEmail}
+                                          onChange={(e) =>
+                                            setEditingEmail(e.target.value)
+                                          }
+                                          className="w-64 max-w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                          placeholder="Email"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <p className="font-bold text-slate-900">
+                                          {entry.username}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                          {entry.email}
+                                        </p>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -961,7 +986,6 @@ export function AdminDashboard({
                                       Faculty Coordinator
                                     </option>
                                     <option value="organizer">Organizer</option>
-                                    <option value="admin">Admin</option>
                                   </select>
                                 ) : (
                                   <span className="text-xs font-bold text-slate-600">
@@ -991,23 +1015,38 @@ export function AdminDashboard({
                                     <>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          const key = entry.email.trim()
-                                          setRoleOverrides((prev) => ({
-                                            ...prev,
-                                            [key]: editingRole,
-                                          }))
-                                          setEditingEmail(null)
+                                        disabled={isSavingEdit}
+                                        onClick={async () => {
+                                          if (!onUpdateUser) return
+                                          const nextName = editingName.trim()
+                                          const nextEmail = editingEmail.trim()
+                                          if (!nextName || !nextEmail) {
+                                            alert('Name and email are required.')
+                                            return
+                                          }
+
+                                          setIsSavingEdit(true)
+                                          const updated = await onUpdateUser(entry.id, {
+                                            name: nextName,
+                                            email: nextEmail,
+                                            role: editingRole,
+                                          })
+                                          setIsSavingEdit(false)
+
+                                          if (!updated) return
+                                          setEditingUserId(null)
                                         }}
                                         className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
                                       >
-                                        Save
+                                        {isSavingEdit ? 'Saving…' : 'Save'}
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          setEditingEmail(null)
-                                          setEditingRole(entry.role)
+                                          setEditingUserId(null)
+                                          setEditingName('')
+                                          setEditingEmail('')
+                                          setEditingRole('student')
                                         }}
                                         className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
                                       >
@@ -1034,8 +1073,10 @@ export function AdminDashboard({
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          setEditingEmail(entry.email)
-                                          setEditingRole(entry.role)
+                                          setEditingUserId(entry.id)
+                                          setEditingName(entry.username || '')
+                                          setEditingEmail(entry.email || '')
+                                          setEditingRole(entry.role || 'student')
                                         }}
                                         className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                                       >
