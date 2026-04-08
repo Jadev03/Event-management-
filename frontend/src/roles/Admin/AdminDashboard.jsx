@@ -84,6 +84,9 @@ export function AdminDashboard({
   const [deleteCandidate, setDeleteCandidate] = useState(null) // { id, email, username }
   const [isDeletingUser, setIsDeletingUser] = useState(false)
 
+  const [roleFilter, setRoleFilter] = useState('all') // all | student | facultyCoordinator | organizer
+  const [isRoleFilterOpen, setIsRoleFilterOpen] = useState(false)
+
   const [monthlyAnalytics, setMonthlyAnalytics] = useState([])
   const [monthlyStatus, setMonthlyStatus] = useState('idle') // idle | loading
   const [monthlyError, setMonthlyError] = useState('')
@@ -202,6 +205,12 @@ export function AdminDashboard({
       .slice(0, 8)
   }, [users])
 
+  const filteredUsers = useMemo(() => {
+    const base = [...(users || [])]
+    if (roleFilter === 'all') return base
+    return base.filter((u) => u?.role === roleFilter)
+  }, [users, roleFilter])
+
   const sidebarItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'users', label: 'Users & Roles', icon: Users },
@@ -267,6 +276,16 @@ export function AdminDashboard({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Role filter backdrop (closes dropdown) */}
+      {isRoleFilterOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 cursor-default"
+          aria-label="Close role filter"
+          onClick={() => setIsRoleFilterOpen(false)}
+        />
       )}
       {/* Sidebar / Drawer */}
       <aside className="bg-white border-r border-black/5 flex flex-col z-20 transition-all duration-200" style={{ width: isSidebarOpen ? 260 : 80 }}>
@@ -845,9 +864,59 @@ export function AdminDashboard({
                           className="pl-10 pr-4 py-2 bg-slate-50 border border-black/5 rounded-xl text-sm outline-none w-64"
                         />
                       </div>
-                      <button className="p-2 hover:bg-slate-50 rounded-xl transition-colors">
-                        <Filter size={20} className="text-slate-400" />
-                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsRoleFilterOpen((v) => !v)}
+                          className={cn(
+                            'p-2 rounded-xl transition-colors border relative z-40',
+                            isRoleFilterOpen
+                              ? 'bg-indigo-50 border-indigo-100'
+                              : 'hover:bg-slate-50 border-transparent',
+                          )}
+                          aria-haspopup="menu"
+                          aria-expanded={isRoleFilterOpen}
+                          aria-label="Filter users by role"
+                        >
+                          <Filter size={20} className="text-slate-400" />
+                        </button>
+
+                        {isRoleFilterOpen && (
+                          <div
+                            className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-black/10 shadow-lg overflow-hidden z-40"
+                            role="menu"
+                            onMouseDown={(e) => e.stopPropagation()}
+                          >
+                            {[
+                              { id: 'all', label: 'All' },
+                              { id: 'student', label: 'Student' },
+                              { id: 'facultyCoordinator', label: 'Faculty Coordinator' },
+                              { id: 'organizer', label: 'Organizer' },
+                            ].map((opt) => {
+                              const active = roleFilter === opt.id
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => {
+                                    setRoleFilter(opt.id)
+                                    setIsRoleFilterOpen(false)
+                                  }}
+                                  className={cn(
+                                    'w-full text-left px-4 py-3 text-sm transition-colors',
+                                    active
+                                      ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                                      : 'hover:bg-slate-50 text-slate-700',
+                                  )}
+                                >
+                                  {opt.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="overflow-x-auto">
@@ -870,7 +939,7 @@ export function AdminDashboard({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-black/5">
-                        {users.map((entry) => {
+                        {filteredUsers.map((entry) => {
                           const isDeactivated = entry.isDeactivated
                           const statusLabel = isDeactivated ? 'Deactivated' : 'Active'
                           const statusClass = isDeactivated
