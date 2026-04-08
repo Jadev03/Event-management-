@@ -56,10 +56,8 @@ export function ChangePasswordModal({ open, onClose }) {
         { oldPassword, newPassword, confirmPassword },
         { headers: { Authorization: `Bearer ${accessToken}` } },
       )
-      setSuccess('Password updated successfully.')
-      setOldPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
+      // Close on success (and reset form state)
+      close()
     } catch (err) {
       setError(err?.response?.data?.message || 'Unable to update password.')
     } finally {
