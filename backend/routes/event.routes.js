@@ -13,6 +13,7 @@ const {
   getOrganizerOverview,
   registerForEvent,
   getStudentRegistrations,
+  getOrganizerMonthlyEventStatusAnalytics,
 } = require('../controllers/event.controller');
 
 const router = express.Router();
@@ -20,6 +21,7 @@ const router = express.Router();
 // Organizer event endpoints
 router.post('/', createEvent);
 router.get('/overview', getOrganizerOverview);
+router.get('/analytics/events-by-month', getOrganizerMonthlyEventStatusAnalytics);
 router.get('/mine', listMyEvents);
 router.get('/approved', listApprovedEvents);
 router.put('/:id', updateMyEvent);

@@ -20,6 +20,9 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -94,6 +97,10 @@ export function OrganizerDashboard({ user, onLogout }) {
     topEvents: [],
   })
 
+  const [monthlyAnalytics, setMonthlyAnalytics] = useState([])
+  const [monthlyStatus, setMonthlyStatus] = useState('idle') // idle | loading
+  const [monthlyError, setMonthlyError] = useState('')
+
   const isFirstTabRender = useRef(true)
 
   const fetchEvents = useCallback(() => {
@@ -135,10 +142,37 @@ export function OrganizerDashboard({ user, onLogout }) {
       .catch(() => {})
   }, [API_BASE_URL])
 
+  const fetchMonthlyAnalytics = useCallback(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setMonthlyAnalytics([])
+      setMonthlyError('You are not logged in.')
+      return
+    }
+
+    setMonthlyStatus('loading')
+    setMonthlyError('')
+    axios
+      .get(`${API_BASE_URL}/api/events/analytics/events-by-month?months=6`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        setMonthlyAnalytics(res.data?.series ?? [])
+      })
+      .catch((e) => {
+        setMonthlyAnalytics([])
+        setMonthlyError(
+          e?.response?.data?.message || 'Unable to load analytics from server.',
+        )
+      })
+      .finally(() => setMonthlyStatus('idle'))
+  }, [API_BASE_URL])
+
   useEffect(() => {
     fetchEvents()
     fetchOverview()
-  }, [API_BASE_URL, fetchEvents, fetchOverview])
+    fetchMonthlyAnalytics()
+  }, [API_BASE_URL, fetchEvents, fetchOverview, fetchMonthlyAnalytics])
 
   // Reload data when switching organizer drawer tabs so each tab shows fresh data
   useEffect(() => {
@@ -148,7 +182,8 @@ export function OrganizerDashboard({ user, onLogout }) {
     }
     fetchEvents()
     fetchOverview()
-  }, [activeTab, fetchEvents, fetchOverview])
+    if (activeTab === 'overview') fetchMonthlyAnalytics()
+  }, [activeTab, fetchEvents, fetchOverview, fetchMonthlyAnalytics])
 
   const handleOpenCreate = () => {
     setCreateError('')
@@ -988,6 +1023,96 @@ export function OrganizerDashboard({ user, onLogout }) {
                         </span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </section>
+
+              <section className="grid grid-cols-1 gap-8">
+                <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">
+                        Monthly event status analytics
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Event counts by month, split by status.
+                      </p>
+                    </div>
+                  </div>
+
+                  {monthlyError && (
+                    <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {monthlyError}
+                    </div>
+                  )}
+
+                  {monthlyStatus === 'loading' && monthlyAnalytics.length === 0 && (
+                    <p className="text-sm text-slate-600">Loading analytics…</p>
+                  )}
+
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={monthlyAnalytics}>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          vertical={false}
+                          stroke="#F1F5F9"
+                        />
+                        <XAxis
+                          dataKey="month"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 12, fill: '#64748B' }}
+                          dy={10}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 12, fill: '#64748B' }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: '16px',
+                            border: 'none',
+                            boxShadow:
+                              '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                          }}
+                        />
+                        <Legend />
+                        <Line
+                          dataKey="pendingApprovals"
+                          name="Pending"
+                          type="monotone"
+                          stroke="#F59E0B"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        />
+                        <Line
+                          dataKey="accepted"
+                          name="Approved"
+                          type="monotone"
+                          stroke="#10B981"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        />
+                        <Line
+                          dataKey="rejected"
+                          name="Rejected"
+                          type="monotone"
+                          stroke="#EF4444"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        />
+                        <Line
+                          dataKey="completed"
+                          name="Completed"
+                          type="monotone"
+                          stroke="#4F46E5"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
               </section>
