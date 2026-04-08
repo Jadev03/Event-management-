@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
 import {
   Activity,
   AlertTriangle,
@@ -19,11 +20,10 @@ import {
   BarChart3,
 } from 'lucide-react'
 import {
-  Area,
-  Bar,
   CartesianGrid,
-  ComposedChart,
+  Legend,
   Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -35,14 +35,8 @@ const cn = (...classes) => classes.filter(Boolean).join(' ')
 
 const ATTEMPT_WINDOW_MINUTES = 10
 
-const predictiveData = [
-  { name: 'Jan', attendance: 400, prediction: 450, noShow: 50 },
-  { name: 'Feb', attendance: 300, prediction: 380, noShow: 80 },
-  { name: 'Mar', attendance: 600, prediction: 580, noShow: 20 },
-  { name: 'Apr', attendance: 800, prediction: 850, noShow: 40 },
-  { name: 'May', attendance: 500, prediction: 600, noShow: 100 },
-  { name: 'Jun', attendance: 900, prediction: 920, noShow: 30 },
-]
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
 const formatRole = (role) => {
   switch (role) {
@@ -94,6 +88,39 @@ export function AdminDashboard({
   const [roleOverrides, setRoleOverrides] = useState({})
   const [editingEmail, setEditingEmail] = useState(null)
   const [editingRole, setEditingRole] = useState('student')
+
+  const [monthlyAnalytics, setMonthlyAnalytics] = useState([])
+  const [monthlyStatus, setMonthlyStatus] = useState('idle') // idle | loading
+  const [monthlyError, setMonthlyError] = useState('')
+
+  useEffect(() => {
+    if (activeTab !== 'analytics') return
+
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setMonthlyAnalytics([])
+      setMonthlyError('You are not logged in.')
+      return
+    }
+
+    setMonthlyStatus('loading')
+    setMonthlyError('')
+    axios
+      .get(`${API_BASE_URL}/api/admin/analytics/events-by-month?months=6`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        setMonthlyAnalytics(res.data?.series ?? [])
+      })
+      .catch((e) => {
+        setMonthlyAnalytics([])
+        setMonthlyError(
+          e?.response?.data?.message ||
+            'Unable to load analytics from server.',
+        )
+      })
+      .finally(() => setMonthlyStatus('idle'))
+  }, [activeTab])
 
   const generatePassword = () => {
     const chars =
@@ -582,38 +609,34 @@ export function AdminDashboard({
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h2 className="text-xl font-bold text-slate-900">
-                      Predictive attendance insights
+                      Monthly event status analytics
                     </h2>
                     <p className="text-xs text-slate-500 mt-1">
-                      Forecast event turnout to help faculty, organizers, and
-                      students plan better.
+                      Event counts by month, split by status.
                     </p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-indigo-600" />
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">
-                        Actual
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-emerald-400" />
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">
-                        Predicted
-                      </span>
-                    </div>
-                  </div>
                 </div>
+
+                {monthlyError && (
+                  <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {monthlyError}
+                  </div>
+                )}
+
+                {monthlyStatus === 'loading' && monthlyAnalytics.length === 0 && (
+                  <p className="text-sm text-slate-600">Loading analytics…</p>
+                )}
+
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={predictiveData}>
+                    <LineChart data={monthlyAnalytics}>
                       <CartesianGrid
                         strokeDasharray="3 3"
                         vertical={false}
                         stroke="#F1F5F9"
                       />
                       <XAxis
-                        dataKey="name"
+                        dataKey="month"
                         axisLine={false}
                         tickLine={false}
                         tick={{ fontSize: 12, fill: '#64748B' }}
@@ -632,29 +655,40 @@ export function AdminDashboard({
                             '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
                         }}
                       />
-                      <Area
+                      <Legend />
+                      <Line
+                        dataKey="pendingApprovals"
+                        name="Pending"
                         type="monotone"
-                        dataKey="prediction"
-                        fill="#10B981"
-                        fillOpacity={0.1}
-                        stroke="#10B981"
+                        stroke="#F59E0B"
                         strokeWidth={2}
-                        strokeDasharray="5 5"
-                      />
-                      <Bar
-                        dataKey="attendance"
-                        fill="#4F46E5"
-                        radius={[4, 4, 0, 0]}
-                        barSize={30}
+                        dot={{ r: 3 }}
                       />
                       <Line
+                        dataKey="accepted"
+                        name="Accepted"
                         type="monotone"
-                        dataKey="noShow"
+                        stroke="#10B981"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        dataKey="rejected"
+                        name="Rejected"
+                        type="monotone"
                         stroke="#EF4444"
                         strokeWidth={2}
-                        dot={{ r: 4 }}
+                        dot={{ r: 3 }}
                       />
-                    </ComposedChart>
+                      <Line
+                        dataKey="completed"
+                        name="Completed"
+                        type="monotone"
+                        stroke="#4F46E5"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
               </div>
