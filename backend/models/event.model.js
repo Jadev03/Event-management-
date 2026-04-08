@@ -19,6 +19,8 @@ const eventSchema = new mongoose.Schema(
       decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
       decidedAt: { type: Date, default: null },
       rejectionReason: { type: String, default: '', trim: true },
+      comment: { type: String, default: '', trim: true },
+      commentUpdatedAt: { type: Date, default: null },
     },
   },
   { timestamps: true }

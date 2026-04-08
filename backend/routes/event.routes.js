@@ -8,6 +8,7 @@ const {
   listApprovedEvents,
   approveEvent,
   rejectEvent,
+  updateDecisionComment,
   checkInQr,
   getOrganizerOverview,
   registerForEvent,
@@ -33,6 +34,7 @@ router.get('/pending', listPendingEvents);
 router.get('/faculty/all', listAllEventsForFaculty);
 router.post('/:id/approve', approveEvent);
 router.post('/:id/reject', rejectEvent);
+router.patch('/:id/comment', updateDecisionComment);
 
 module.exports = router;
 

@@ -392,6 +392,7 @@ export function OrganizerDashboard({ user, onLogout }) {
           capacity: e.totalSeats,
           status: e.status ?? 'pending',
           thumbnailUrl: e.thumbnailUrl ?? '',
+          decision: e.decision ?? null,
           _server: e,
         }
       }),
@@ -1124,6 +1125,9 @@ export function OrganizerDashboard({ user, onLogout }) {
                         Status
                       </th>
                       <th className="px-6 md:px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Reason
+                      </th>
+                      <th className="px-6 md:px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
                         Actions
                       </th>
                     </tr>
@@ -1196,6 +1200,19 @@ export function OrganizerDashboard({ user, onLogout }) {
                           >
                             {event.status}
                           </span>
+                        </td>
+                        <td className="px-6 md:px-8 py-4">
+                          {event.status === 'rejected' ? (
+                            <span className="text-xs text-slate-700">
+                              {event.decision?.rejectionReason || '—'}
+                            </span>
+                          ) : event.status === 'approved' ? (
+                            <span className="text-xs text-slate-700">
+                              {event.decision?.comment || '—'}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="px-6 md:px-8 py-4">
                           <button

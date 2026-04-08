@@ -181,6 +181,15 @@ const listMyEvents = async (req, res) => {
         scannedCount: scansByEventId.get(String(e._id)) || 0,
         thumbnailUrl: e.thumbnailUrl,
         status: e.status,
+        decision: e.decision
+          ? {
+              decidedBy: e.decision.decidedBy?.toString?.() || null,
+              decidedAt: e.decision.decidedAt || null,
+              rejectionReason: e.decision.rejectionReason || '',
+              comment: e.decision.comment || '',
+              commentUpdatedAt: e.decision.commentUpdatedAt || null,
+            }
+          : null,
         createdAt: e.createdAt,
       })),
     });
@@ -359,6 +368,15 @@ const listPendingEvents = async (req, res) => {
               role: e.createdBy.role,
             }
           : null,
+        decision: e.decision
+          ? {
+              decidedBy: e.decision.decidedBy?.toString?.() || null,
+              decidedAt: e.decision.decidedAt || null,
+              rejectionReason: e.decision.rejectionReason || '',
+              comment: e.decision.comment || '',
+              commentUpdatedAt: e.decision.commentUpdatedAt || null,
+            }
+          : null,
       })),
     });
   } catch (error) {
@@ -403,6 +421,8 @@ const listAllEventsForFaculty = async (req, res) => {
               decidedBy: e.decision.decidedBy?.toString?.() || null,
               decidedAt: e.decision.decidedAt || null,
               rejectionReason: e.decision.rejectionReason || '',
+              comment: e.decision.comment || '',
+              commentUpdatedAt: e.decision.commentUpdatedAt || null,
             }
           : null,
       })),
@@ -530,6 +550,8 @@ const approveEvent = async (req, res) => {
     const eventId = req.params?.id;
     if (!eventId) return res.status(400).json({ message: 'Event id is required' });
 
+    const comment = String(req.body?.comment || '').trim();
+
     const event = await Event.findById(eventId);
     if (!event) return res.status(404).json({ message: 'Event not found' });
 
@@ -544,6 +566,8 @@ const approveEvent = async (req, res) => {
       decidedBy: req.user.id,
       decidedAt: new Date(),
       rejectionReason: '',
+      comment,
+      commentUpdatedAt: comment ? new Date() : null,
     };
 
     await event.save();
@@ -558,6 +582,8 @@ const approveEvent = async (req, res) => {
           decidedBy: event.decision?.decidedBy?.toString?.() || null,
           decidedAt: event.decision?.decidedAt || null,
           rejectionReason: event.decision?.rejectionReason || '',
+          comment: event.decision?.comment || '',
+          commentUpdatedAt: event.decision?.commentUpdatedAt || null,
         },
         updatedAt: event.updatedAt,
       },
@@ -577,6 +603,10 @@ const rejectEvent = async (req, res) => {
     if (!eventId) return res.status(400).json({ message: 'Event id is required' });
 
     const reason = String(req.body?.reason || '').trim();
+    const comment = String(req.body?.comment || '').trim();
+    if (!reason) {
+      return res.status(400).json({ message: 'Rejection reason is required' });
+    }
 
     const event = await Event.findById(eventId);
     if (!event) return res.status(404).json({ message: 'Event not found' });
@@ -592,6 +622,8 @@ const rejectEvent = async (req, res) => {
       decidedBy: req.user.id,
       decidedAt: new Date(),
       rejectionReason: reason,
+      comment,
+      commentUpdatedAt: comment ? new Date() : null,
     };
 
     await event.save();
@@ -606,12 +638,57 @@ const rejectEvent = async (req, res) => {
           decidedBy: event.decision?.decidedBy?.toString?.() || null,
           decidedAt: event.decision?.decidedAt || null,
           rejectionReason: event.decision?.rejectionReason || '',
+          comment: event.decision?.comment || '',
+          commentUpdatedAt: event.decision?.commentUpdatedAt || null,
         },
         updatedAt: event.updatedAt,
       },
     });
   } catch (error) {
     logger.error('Error rejecting event', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const updateDecisionComment = async (req, res) => {
+  try {
+    const deny = requireFacultyCoordinator(req, res);
+    if (deny) return;
+
+    const eventId = req.params?.id;
+    if (!eventId) return res.status(400).json({ message: 'Event id is required' });
+
+    const comment = String(req.body?.comment || '').trim();
+
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    // Comment is meant for the organizer; only faculty coordinator can edit.
+    event.decision = event.decision || {};
+    event.decision.comment = comment;
+    event.decision.commentUpdatedAt = new Date();
+    if (!event.decision.decidedBy) event.decision.decidedBy = req.user.id;
+    if (!event.decision.decidedAt) event.decision.decidedAt = new Date();
+
+    await event.save();
+
+    return res.status(200).json({
+      message: 'Comment updated',
+      event: {
+        id: event._id.toString(),
+        status: event.status,
+        decision: {
+          decidedBy: event.decision?.decidedBy?.toString?.() || null,
+          decidedAt: event.decision?.decidedAt || null,
+          rejectionReason: event.decision?.rejectionReason || '',
+          comment: event.decision?.comment || '',
+          commentUpdatedAt: event.decision?.commentUpdatedAt || null,
+        },
+        updatedAt: event.updatedAt,
+      },
+    });
+  } catch (error) {
+    logger.error('Error updating decision comment', { message: error.message });
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -744,6 +821,7 @@ module.exports = {
   updateMyEvent,
   approveEvent,
   rejectEvent,
+  updateDecisionComment,
   checkInQr,
   getOrganizerOverview,
   registerForEvent,

@@ -126,7 +126,8 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
   const [pendingError, setPendingError] = useState('')
   const [pendingStatus, setPendingStatus] = useState('idle') // idle | loading
   const [actionBusyById, setActionBusyById] = useState({})
-  const [rejectModal, setRejectModal] = useState({ open: false, event: null, reason: '' })
+  const [approveModal, setApproveModal] = useState({ open: false, event: null, comment: '' })
+  const [rejectModal, setRejectModal] = useState({ open: false, event: null, reason: '', comment: '' })
 
   useEffect(() => {
     const accessToken = localStorage.getItem('accessToken')
@@ -193,43 +194,21 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  const approve = async (eventId) => {
-    if (!eventId) return
-    const accessToken = localStorage.getItem('accessToken')
-    if (!accessToken) {
-      setPendingError('You are not logged in.')
-      return
-    }
-
-    setActionBusyById((prev) => ({ ...prev, [eventId]: true }))
+  const openApprove = (event) => {
     setPendingError('')
-    try {
-      await axios.post(
-        `${API_BASE_URL}/api/events/${eventId}/approve`,
-        {},
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      )
-      setPendingEvents((prev) => prev.filter((e) => e.id !== eventId))
-    } catch (e) {
-      setPendingError(
-        e?.response?.data?.message || 'Failed to approve event.',
-      )
-    } finally {
-      setActionBusyById((prev) => ({ ...prev, [eventId]: false }))
-    }
+    setApproveModal({
+      open: true,
+      event,
+      comment: event?.decision?.comment || '',
+    })
   }
 
-  const openReject = (event) => {
-    setPendingError('')
-    setRejectModal({ open: true, event, reason: '' })
+  const closeApprove = () => {
+    setApproveModal({ open: false, event: null, comment: '' })
   }
 
-  const closeReject = () => {
-    setRejectModal({ open: false, event: null, reason: '' })
-  }
-
-  const reject = async () => {
-    const ev = rejectModal.event
+  const approve = async () => {
+    const ev = approveModal.event
     if (!ev?.id) return
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
@@ -242,8 +221,55 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
     setPendingError('')
     try {
       await axios.post(
+        `${API_BASE_URL}/api/events/${eventId}/approve`,
+        { comment: approveModal.comment },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      setPendingEvents((prev) => prev.filter((e) => e.id !== eventId))
+      closeApprove()
+    } catch (e) {
+      setPendingError(
+        e?.response?.data?.message || 'Failed to approve event.',
+      )
+    } finally {
+      setActionBusyById((prev) => ({ ...prev, [eventId]: false }))
+    }
+  }
+
+  const openReject = (event) => {
+    setPendingError('')
+    setRejectModal({
+      open: true,
+      event,
+      reason: '',
+      comment: event?.decision?.comment || '',
+    })
+  }
+
+  const closeReject = () => {
+    setRejectModal({ open: false, event: null, reason: '', comment: '' })
+  }
+
+  const reject = async () => {
+    const ev = rejectModal.event
+    if (!ev?.id) return
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setPendingError('You are not logged in.')
+      return
+    }
+
+    const eventId = ev.id
+    if (!rejectModal.reason.trim()) {
+      setPendingError('Rejection reason is required.')
+      return
+    }
+    setActionBusyById((prev) => ({ ...prev, [eventId]: true }))
+    setPendingError('')
+    try {
+      await axios.post(
         `${API_BASE_URL}/api/events/${eventId}/reject`,
-        { reason: rejectModal.reason },
+        { reason: rejectModal.reason, comment: rejectModal.comment },
         { headers: { Authorization: `Bearer ${accessToken}` } },
       )
       setPendingEvents((prev) => prev.filter((e) => e.id !== eventId))
@@ -633,7 +659,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                           <div className="shrink-0 flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => approve(event.id)}
+                              onClick={() => openApprove(event)}
                               disabled={busy}
                               className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
@@ -655,6 +681,61 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                 </div>
               </div>
 
+              {approveModal.open && (
+                <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                  <div className="bg-white rounded-3xl shadow-2xl border border-black/5 w-full max-w-xl p-6 md:p-8 relative">
+                    <button
+                      type="button"
+                      onClick={closeApprove}
+                      className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 text-slate-500"
+                      aria-label="Close approve dialog"
+                    >
+                      <X size={18} />
+                    </button>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-2">
+                      Approve event
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                      {approveModal.event?.name}
+                    </p>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-600">
+                        Comment to organizer (optional)
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={approveModal.comment}
+                        onChange={(e) =>
+                          setApproveModal((prev) => ({
+                            ...prev,
+                            comment: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
+                        placeholder="Suggestions or improvement notes (optional)…"
+                      />
+                    </div>
+                    <div className="mt-6 flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={closeApprove}
+                        className="px-4 py-2.5 rounded-2xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={approve}
+                        className="px-5 py-2.5 rounded-2xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                        disabled={Boolean(actionBusyById[approveModal.event?.id])}
+                      >
+                        {actionBusyById[approveModal.event?.id] ? 'Approving…' : 'Approve event'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {rejectModal.open && (
                 <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
                   <div className="bg-white rounded-3xl shadow-2xl border border-black/5 w-full max-w-xl p-6 md:p-8 relative">
@@ -674,7 +755,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                     </p>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-slate-600">
-                        Reason (optional)
+                        Reason (required)
                       </label>
                       <textarea
                         rows={4}
@@ -687,6 +768,23 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                         }
                         className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
                         placeholder="Explain why this event is rejected…"
+                      />
+                    </div>
+                    <div className="space-y-2 mt-4">
+                      <label className="text-xs font-semibold text-slate-600">
+                        Comment to organizer (optional)
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={rejectModal.comment}
+                        onChange={(e) =>
+                          setRejectModal((prev) => ({
+                            ...prev,
+                            comment: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
+                        placeholder="Suggestions or improvement notes (optional)…"
                       />
                     </div>
                     <div className="mt-6 flex items-center justify-end gap-3">
