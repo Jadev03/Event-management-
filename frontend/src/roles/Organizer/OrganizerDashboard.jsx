@@ -33,49 +33,6 @@ const cn = (...classes) => classes.filter(Boolean).join(' ')
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444']
 
-const MOCK_EVENTS = [
-  {
-    id: 'e1',
-    title: 'AI Workshop 2026',
-    date: 'May 20, 2026',
-    registeredCount: 120,
-    capacity: 180,
-    status: 'approved',
-  },
-  {
-    id: 'e2',
-    title: 'Annual Sports Meet',
-    date: 'Jun 02, 2026',
-    registeredCount: 340,
-    capacity: 500,
-    status: 'approved',
-  },
-  {
-    id: 'e3',
-    title: 'Research Symposium',
-    date: 'Jun 15, 2026',
-    registeredCount: 60,
-    capacity: 120,
-    status: 'pending',
-  },
-  {
-    id: 'e4',
-    title: 'Web Dev Bootcamp: React + Vite',
-    date: 'May 28, 2026',
-    registeredCount: 95,
-    capacity: 150,
-    status: 'approved',
-  },
-  {
-    id: 'e5',
-    title: 'Career Fair 2026',
-    date: 'Jun 05, 2026',
-    registeredCount: 420,
-    capacity: 900,
-    status: 'completed',
-  },
-]
-
 export function OrganizerDashboard({ user, onLogout }) {
   const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
@@ -85,6 +42,7 @@ export function OrganizerDashboard({ user, onLogout }) {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [events, setEvents] = useState([])
+  const [eventsError, setEventsError] = useState('')
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -142,8 +100,10 @@ export function OrganizerDashboard({ user, onLogout }) {
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
       setEvents([])
+      setEventsError('You are not logged in.')
       return
     }
+    setEventsError('')
     axios
       .get(`${API_BASE_URL}/api/events/mine`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -152,8 +112,11 @@ export function OrganizerDashboard({ user, onLogout }) {
         const serverEvents = res.data?.events ?? []
         setEvents(serverEvents)
       })
-      .catch(() => {
-        setEvents((prev) => prev)
+      .catch((err) => {
+        setEvents([])
+        setEventsError(
+          err?.response?.data?.message || 'Unable to load events from server.',
+        )
       })
   }, [API_BASE_URL])
 
@@ -210,32 +173,17 @@ export function OrganizerDashboard({ user, onLogout }) {
   const handleOpenEdit = (event) => {
     setEditError('')
     setEditingEvent(event)
-    // event can be either mapped (title/date string) or server event shape
-    if (event?.name) {
-      setEditForm({
-        name: event.name ?? '',
-        description: event.description ?? '',
-        type: event.type ?? 'academic',
-        date: toDateInputValue(event.date),
-        time: event.time ?? '',
-        place: event.place ?? '',
-        seats: String(event.totalSeats ?? ''),
-        thumbnail: event.thumbnailUrl ?? '',
-        status: event.status ?? 'pending',
-      })
-    } else {
-      // Legacy/mocked event (limited fields)
-      setEditForm((prev) => ({
-        ...prev,
-        name: event.title ?? '',
-        date: '',
-        time: '',
-        place: '',
-        seats: String(event.capacity ?? ''),
-        thumbnail: event.thumbnailUrl ?? event.thumbnail ?? '',
-        status: event.status ?? 'pending',
-      }))
-    }
+    setEditForm({
+      name: event.name ?? '',
+      description: event.description ?? '',
+      type: event.type ?? 'academic',
+      date: toDateInputValue(event.date),
+      time: event.time ?? '',
+      place: event.place ?? '',
+      seats: String(event.totalSeats ?? ''),
+      thumbnail: event.thumbnailUrl ?? '',
+      status: event.status ?? 'pending',
+    })
     setIsEditOpen(true)
   }
 
@@ -378,7 +326,6 @@ export function OrganizerDashboard({ user, onLogout }) {
   const allEvents = useMemo(
     () =>
       (events || []).map((e) => {
-        if (e.title) return e
         return {
           id: e.id,
           title: e.name,
@@ -552,8 +499,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                 Create new event
               </h2>
               <p className="text-sm text-slate-500 mb-6">
-                Add event details. This form is local-only for now and will add
-                to your &quot;My Events&quot; list.
+                Add event details and submit to create it in the system.
               </p>
               <form
                 onSubmit={handleSubmitCreate}
@@ -1103,6 +1049,11 @@ export function OrganizerDashboard({ user, onLogout }) {
                 </div>
               </div>
               <div className="overflow-x-auto">
+                {eventsError && (
+                  <div className="mx-6 md:mx-8 mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {eventsError}
+                  </div>
+                )}
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 border-b border-black/5">
                     <tr>
