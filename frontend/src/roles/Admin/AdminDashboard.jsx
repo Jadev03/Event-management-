@@ -84,6 +84,9 @@ export function AdminDashboard({
   const [deleteCandidate, setDeleteCandidate] = useState(null) // { id, email, username }
   const [isDeletingUser, setIsDeletingUser] = useState(false)
 
+  const [toggleCandidate, setToggleCandidate] = useState(null) // { email, username, nextAction: 'activate'|'deactivate' }
+  const [isTogglingUser, setIsTogglingUser] = useState(false)
+
   const [roleFilter, setRoleFilter] = useState('all') // all | student | facultyCoordinator | organizer
   const [isRoleFilterOpen, setIsRoleFilterOpen] = useState(false)
   const [userSearch, setUserSearch] = useState('')
@@ -284,6 +287,72 @@ export function AdminDashboard({
                 className="px-4 py-2 rounded-xl text-sm font-semibold border border-red-100 bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-60"
               >
                 {isDeletingUser ? 'Deleting…' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Activate/Deactivate confirmation modal */}
+      {toggleCandidate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm user status change"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !isTogglingUser) {
+              setToggleCandidate(null)
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-[24px] bg-white border border-black/5 shadow-xl p-6">
+            <h3 className="text-lg font-bold text-slate-900">Are you sure?</h3>
+            <p className="text-sm text-slate-600 mt-2">
+              Are you sure you want to{' '}
+              <span className="font-semibold text-slate-900">
+                {toggleCandidate.nextAction}
+              </span>{' '}
+              <span className="font-semibold text-slate-900">
+                {toggleCandidate.username}
+              </span>
+              ?
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={isTogglingUser}
+                onClick={() => setToggleCandidate(null)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-60"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                disabled={isTogglingUser}
+                onClick={async () => {
+                  if (!onToggleDeactivate) return
+                  setIsTogglingUser(true)
+                  try {
+                    await onToggleDeactivate(toggleCandidate.email)
+                    setToggleCandidate(null)
+                  } finally {
+                    setIsTogglingUser(false)
+                  }
+                }}
+                className={cn(
+                  'px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-60',
+                  toggleCandidate.nextAction === 'activate'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    : 'border-red-100 bg-red-50 text-red-700 hover:bg-red-100',
+                )}
+              >
+                {isTogglingUser
+                  ? toggleCandidate.nextAction === 'activate'
+                    ? 'Activating…'
+                    : 'Deactivating…'
+                  : 'Yes'}
               </button>
             </div>
           </div>
@@ -612,7 +681,13 @@ export function AdminDashboard({
                                   {isDeactivated ? (
                                     <button
                                       type="button"
-                                      onClick={() => onToggleDeactivate?.(u.email)}
+                                      onClick={() =>
+                                        setToggleCandidate({
+                                          email: u.email,
+                                          username: u.username,
+                                          nextAction: 'activate',
+                                        })
+                                      }
                                       className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                                     >
                                       Activate
@@ -1076,8 +1151,13 @@ export function AdminDashboard({
                                       <button
                                         type="button"
                                         onClick={() =>
-                                          onToggleDeactivate &&
-                                          onToggleDeactivate(entry.email)
+                                          setToggleCandidate({
+                                            email: entry.email,
+                                            username: entry.username,
+                                            nextAction: isDeactivated
+                                              ? 'activate'
+                                              : 'deactivate',
+                                          })
                                         }
                                         className={cn(
                                           'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors',
