@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const { User } = require('../models/user.model');
 
 const authenticateUser = async (email, password) => {
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = email.trim();
 
   const user = await User.findOne({ email: normalizedEmail });
   if (!user) {

@@ -69,7 +69,7 @@ export function Login({ onLogin, error }) {
   }
 
   const handleRequestOtp = async () => {
-    const trimmed = recoveryEmail.trim().toLowerCase()
+    const trimmed = recoveryEmail.trim()
     if (!trimmed) {
       setRecoverError('Please enter your email.')
       return
@@ -117,7 +117,7 @@ export function Login({ onLogin, error }) {
     try {
       const res = await axios.post(
         `${API_BASE_URL}/api/auth/forgot-password`,
-        { email: recoveryEmail.trim().toLowerCase() },
+        { email: recoveryEmail.trim() },
         { headers: { 'Content-Type': 'application/json' } },
       )
       const { expiresAt, resendAvailableAt } = res.data || {}
@@ -174,7 +174,7 @@ export function Login({ onLogin, error }) {
       await axios.post(
         `${API_BASE_URL}/api/auth/reset-password-otp`,
         {
-          email: recoveryEmail.trim().toLowerCase(),
+          email: recoveryEmail.trim(),
           otp: otp.trim(),
           newPassword,
           confirmPassword,
@@ -184,7 +184,7 @@ export function Login({ onLogin, error }) {
       setRecoverSuccess('Password updated. You can sign in with your new password.')
       setTimeout(() => {
         resetRecoverFlow()
-        setEmail(recoveryEmail.trim().toLowerCase())
+        setEmail(recoveryEmail.trim())
       }, 2000)
     } catch (err) {
       const msg =
@@ -199,7 +199,7 @@ export function Login({ onLogin, error }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onLogin(email, password)
+    onLogin(email.trim(), password)
   }
 
   if (flow === 'recover') {

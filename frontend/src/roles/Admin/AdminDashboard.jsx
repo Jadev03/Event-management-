@@ -139,7 +139,7 @@ export function AdminDashboard({
 
   const totalUsers = users.length
   const activeUsers = users.filter(
-    (u) => !deactivatedEmails[u.email.toLowerCase()],
+    (u) => !deactivatedEmails[u.email.trim()],
   ).length
   const lockedCount = Object.keys(lockedEmails).length
   const failedAttemptsToday = loginAttempts.filter((a) => {
@@ -152,7 +152,7 @@ export function AdminDashboard({
   const enrichedUsers = useMemo(() => {
     return users
       .map((u) => {
-        const key = u.email.toLowerCase()
+        const key = u.email.trim()
         const effectiveRole = roleOverrides[key] ?? u.role
         const attemptsForUser = loginAttempts.filter((a) => a.email === key)
         const failedRecent = attemptsForUser.filter(
@@ -194,7 +194,7 @@ export function AdminDashboard({
         .reverse()
         .map((a) => {
           const matchingUser = users.find(
-            (u) => u.email.toLowerCase() === a.email,
+            (u) => u.email.trim() === a.email,
           )
           const displayName = matchingUser?.username ?? a.email
           return {
@@ -958,7 +958,7 @@ export function AdminDashboard({
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          const key = entry.email.toLowerCase()
+                                          const key = entry.email.trim()
                                           setRoleOverrides((prev) => ({
                                             ...prev,
                                             [key]: editingRole,

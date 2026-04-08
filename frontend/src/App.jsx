@@ -81,7 +81,7 @@ const AppContent = () => {
   }, [currentUser])
 
   const recordLoginAttempt = (email, success) => {
-    const normalizedEmail = email.trim().toLowerCase()
+    const normalizedEmail = email.trim()
     const timestamp = Date.now()
 
     setLoginAttempts((prev) => {
@@ -120,7 +120,7 @@ const AppContent = () => {
   }
 
   const handleToggleLock = (email) => {
-    const key = email.trim().toLowerCase()
+    const key = email.trim()
     setLockedEmails((prev) => {
       const next = { ...prev }
       if (next[key]) {
@@ -137,7 +137,7 @@ const AppContent = () => {
   }
 
   const handleToggleDeactivate = (email) => {
-    const key = email.trim().toLowerCase()
+    const key = email.trim()
     setDeactivatedEmails((prev) => {
       const next = { ...prev }
       if (next[key]) {
@@ -162,7 +162,7 @@ const AppContent = () => {
   }
 
   const handleLogin = async (email, password) => {
-    const trimmedEmail = email.trim().toLowerCase()
+    const trimmedEmail = email.trim()
     const trimmedPassword = password.trim()
 
     if (deactivatedEmails[trimmedEmail]) {

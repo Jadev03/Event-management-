@@ -25,7 +25,7 @@ const createUserByAdmin = async (req, res) => {
         .json({ message: 'Name, email and role are required' });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = email.trim();
 
     if (!USER_ROLES.includes(role)) {
       return res.status(400).json({

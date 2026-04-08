@@ -10,7 +10,7 @@ const MONGODB_URI =
   process.env.MONGODB_URI || 'mongodb://localhost:27017/event_management';
 
 const upsertUserByEmail = async ({ email, password, name, role }) => {
-  const normalizedEmail = String(email).trim().toLowerCase();
+  const normalizedEmail = String(email).trim();
   const existing = await User.findOne({ email: normalizedEmail }).lean();
 
   const overwriteExistingUsers =

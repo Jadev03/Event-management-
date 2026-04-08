@@ -91,7 +91,7 @@ const changePassword = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   try {
-    const email = (req.body?.email || '').trim().toLowerCase();
+    const email = (req.body?.email || '').trim();
     if (!email) {
       return res.status(400).json({ message: 'Email is required' });
     }
@@ -150,7 +150,7 @@ const forgotPassword = async (req, res) => {
 
 const resetPasswordWithOtp = async (req, res) => {
   try {
-    const email = (req.body?.email || '').trim().toLowerCase();
+    const email = (req.body?.email || '').trim();
     const otp = (req.body?.otp || '').trim();
     const { newPassword, confirmPassword } = req.body || {};
 
