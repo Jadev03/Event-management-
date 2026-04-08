@@ -4,6 +4,7 @@ const {
   listUsers,
   updateUserByAdmin,
   getMonthlyEventStatusAnalytics,
+  getMonthlyLoginTrafficAnalytics,
   deactivateUserByAdmin,
   activateUserByAdmin,
 } = require('../controllers/admin.controller');
@@ -18,6 +19,7 @@ router.patch('/users/:id', updateUserByAdmin);
 router.post('/users/:id/deactivate', deactivateUserByAdmin);
 router.post('/users/:id/activate', activateUserByAdmin);
 router.get('/analytics/events-by-month', getMonthlyEventStatusAnalytics);
+router.get('/analytics/login-traffic-by-month', getMonthlyLoginTrafficAnalytics);
 
 module.exports = router;
 

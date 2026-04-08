@@ -5,6 +5,7 @@ const {
 const { logger } = require('../utils/logger');
 const bcrypt = require('bcrypt');
 const { User } = require('../models/user.model');
+const { LoginAttempt } = require('../models/loginAttempt.model');
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -34,6 +35,16 @@ const login = async (req, res, next) => {
 
     if (!email || !password) {
       logger.warn('Login attempt with missing credentials', { email });
+      try {
+        await LoginAttempt.create({
+          email: String(email || '').trim(),
+          success: false,
+          reason: 'missing_credentials',
+          attemptedAt: new Date(),
+        });
+      } catch {
+        // ignore
+      }
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
@@ -43,6 +54,18 @@ const login = async (req, res, next) => {
     if (!result.ok) {
       if (result.reason === AUTH_FAILURE_REASON.DEACTIVATED) {
         logger.warn('Login blocked: account deactivated', { email: normalizedEmail });
+        try {
+          await LoginAttempt.create({
+            email: normalizedEmail,
+            userId: result.user?._id || null,
+            role: result.user?.role || '',
+            success: false,
+            reason: 'deactivated',
+            attemptedAt: new Date(),
+          });
+        } catch {
+          // ignore
+        }
         return res.status(403).json({
           message:
             'Your account is temporarily blocked. Please contact the administrator.',
@@ -57,6 +80,18 @@ const login = async (req, res, next) => {
           logger.warn('Invalid login attempt (admin - not counted)', {
             email: normalizedEmail,
           });
+          try {
+            await LoginAttempt.create({
+              email: normalizedEmail,
+              userId: userDoc?._id || null,
+              role: userDoc?.role || '',
+              success: false,
+              reason: 'invalid_password',
+              attemptedAt: new Date(),
+            });
+          } catch {
+            // ignore
+          }
           return res.status(401).json({ message: 'Invalid email or password' });
         }
 
@@ -110,11 +145,33 @@ const login = async (req, res, next) => {
         }
 
         logger.warn('Invalid login attempt', { email: normalizedEmail });
+        try {
+          await LoginAttempt.create({
+            email: normalizedEmail,
+            userId: userDoc?._id || null,
+            role: userDoc?.role || '',
+            success: false,
+            reason: 'invalid_password',
+            attemptedAt: new Date(),
+          });
+        } catch {
+          // ignore
+        }
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
       // user not found: do not leak details, no counter update
       logger.warn('Invalid login attempt', { email: normalizedEmail });
+      try {
+        await LoginAttempt.create({
+          email: normalizedEmail,
+          success: false,
+          reason: 'user_not_found',
+          attemptedAt: new Date(),
+        });
+      } catch {
+        // ignore
+      }
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
@@ -137,6 +194,19 @@ const login = async (req, res, next) => {
       email: userDoc.email,
       role: userDoc.role,
     });
+
+    try {
+      await LoginAttempt.create({
+        email: normalizedEmail,
+        userId: userDoc?._id || null,
+        role: userDoc?.role || '',
+        success: true,
+        reason: '',
+        attemptedAt: new Date(),
+      });
+    } catch {
+      // ignore
+    }
 
     return next();
   } catch (error) {

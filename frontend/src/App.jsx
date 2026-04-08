@@ -55,14 +55,16 @@ const AppContent = () => {
       .then((res) => {
         const items = res.data?.users ?? []
         setAdminUsers(
-          items.map((u) => ({
-            id: u.id,
-            email: u.email,
-            username: u.name,
-            role: u.role,
-            isDeactivated: Boolean(u.isDeactivated),
-            failedLoginAttempts: u.failedLoginAttempts ?? 0,
-          })),
+          items
+            .filter((u) => u.role !== 'admin')
+            .map((u) => ({
+              id: u.id,
+              email: u.email,
+              username: u.name,
+              role: u.role,
+              isDeactivated: Boolean(u.isDeactivated),
+              failedLoginAttempts: u.failedLoginAttempts ?? 0,
+            })),
         )
       })
       .catch(() => {

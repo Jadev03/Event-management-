@@ -83,6 +83,10 @@ export function AdminDashboard({
   const [monthlyStatus, setMonthlyStatus] = useState('idle') // idle | loading
   const [monthlyError, setMonthlyError] = useState('')
 
+  const [loginAnalytics, setLoginAnalytics] = useState([])
+  const [loginStatus, setLoginStatus] = useState('idle') // idle | loading
+  const [loginError, setLoginError] = useState('')
+
   useEffect(() => {
     if (activeTab !== 'analytics') return
 
@@ -90,6 +94,8 @@ export function AdminDashboard({
     if (!accessToken) {
       setMonthlyAnalytics([])
       setMonthlyError('You are not logged in.')
+      setLoginAnalytics([])
+      setLoginError('You are not logged in.')
       return
     }
 
@@ -110,6 +116,23 @@ export function AdminDashboard({
         )
       })
       .finally(() => setMonthlyStatus('idle'))
+
+    setLoginStatus('loading')
+    setLoginError('')
+    axios
+      .get(`${API_BASE_URL}/api/admin/analytics/login-traffic-by-month?months=6`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        setLoginAnalytics(res.data?.series ?? [])
+      })
+      .catch((e) => {
+        setLoginAnalytics([])
+        setLoginError(
+          e?.response?.data?.message || 'Unable to load analytics from server.',
+        )
+      })
+      .finally(() => setLoginStatus('idle'))
   }, [activeTab])
 
   const generatePassword = () => {
@@ -160,6 +183,13 @@ export function AdminDashboard({
     () => [...users].slice(-5).reverse(),
     [users],
   )
+
+  const usersNeedingAttention = useMemo(() => {
+    const base = [...(users || [])]
+    return base
+      .sort((a, b) => (b.failedLoginAttempts || 0) - (a.failedLoginAttempts || 0))
+      .slice(0, 6)
+  }, [users])
 
   const sidebarItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -393,9 +423,107 @@ export function AdminDashboard({
                   <h2 className="text-lg font-bold text-slate-900 mb-2">
                     Account management
                   </h2>
-                  <p className="text-xs text-slate-500">
-                    Deactivate or activate users from the Users &amp; Roles tab.
+                  <p className="text-xs text-slate-500 mb-4">
+                    Failed login attempts and account status (manage in Users &amp; Roles tab).
                   </p>
+
+                  {usersNeedingAttention.length === 0 && (
+                    <p className="text-sm text-slate-500">
+                      No users found yet.
+                    </p>
+                  )}
+
+                  {usersNeedingAttention.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 border border-black/5">
+                          <tr>
+                            <th className="px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                              User
+                            </th>
+                            <th className="px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                              Role
+                            </th>
+                            <th className="px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                              Failed attempts
+                            </th>
+                            <th className="px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                              Status
+                            </th>
+                            <th className="px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                              Action
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-black/5 border border-black/5 border-t-0">
+                          {usersNeedingAttention.map((u) => {
+                            const attempts = Number(u.failedLoginAttempts ?? 0)
+                            const isDeactivated = Boolean(u.isDeactivated)
+                            const statusLabel = isDeactivated ? 'Deactivated' : 'Active'
+                            const statusClass = isDeactivated
+                              ? 'bg-red-50 text-red-600 border-red-100'
+                              : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+
+                            const attemptClass =
+                              attempts >= 10
+                                ? 'text-red-700'
+                                : attempts >= 3
+                                  ? 'text-orange-700'
+                                  : 'text-slate-700'
+
+                            return (
+                              <tr key={u.email} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-4 py-3">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-slate-900 truncate">
+                                      {u.username}
+                                    </p>
+                                    <p className="text-xs text-slate-500 truncate">
+                                      {u.email}
+                                    </p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="text-xs font-bold text-slate-600">
+                                    {formatRole(u.role)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={cn('text-xs font-bold', attemptClass)}>
+                                    {attempts}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span
+                                    className={cn(
+                                      'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border',
+                                      statusClass,
+                                    )}
+                                  >
+                                    {statusLabel}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => onToggleDeactivate?.(u.email)}
+                                    className={cn(
+                                      'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors',
+                                      isDeactivated
+                                        ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                        : 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100',
+                                    )}
+                                  >
+                                    {isDeactivated ? 'Activate' : 'Deactivate'}
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
@@ -491,6 +619,86 @@ export function AdminDashboard({
                   </ResponsiveContainer>
                 </div>
               </div>
+
+              <div className="lg:col-span-3 bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">
+                      Monthly login traffic analytics
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Total login attempts, failed attempts, and distinct users by month.
+                    </p>
+                  </div>
+                </div>
+
+                {loginError && (
+                  <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {loginError}
+                  </div>
+                )}
+
+                {loginStatus === 'loading' && loginAnalytics.length === 0 && (
+                  <p className="text-sm text-slate-600">Loading analytics…</p>
+                )}
+
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={loginAnalytics}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#F1F5F9"
+                      />
+                      <XAxis
+                        dataKey="month"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 12, fill: '#64748B' }}
+                        dy={10}
+                      />
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 12, fill: '#64748B' }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: '16px',
+                          border: 'none',
+                          boxShadow:
+                            '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                        }}
+                      />
+                      <Legend />
+                      <Line
+                        dataKey="totalAttempts"
+                        name="Total login attempts"
+                        type="monotone"
+                        stroke="#4F46E5"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        dataKey="failedAttempts"
+                        name="Failed attempts"
+                        type="monotone"
+                        stroke="#EF4444"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        dataKey="trafficUsers"
+                        name="User traffic"
+                        type="monotone"
+                        stroke="#10B981"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
           )}
 
@@ -543,10 +751,6 @@ export function AdminDashboard({
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                       <span className="font-semibold text-slate-700">
                         User &amp; role management
-                      </span>
-                      <span>•</span>
-                      <span>
-                        Review Students, Faculty Coordinators and  Organizers.
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
