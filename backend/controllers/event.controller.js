@@ -3,6 +3,31 @@ const { Attendance } = require('../models/attendance.model');
 const { Registration } = require('../models/registration.model');
 const { logger } = require('../utils/logger');
 
+const buildEventStartDateTime = (dateValue, timeValue) => {
+  const base = dateValue instanceof Date ? new Date(dateValue) : new Date(dateValue);
+  if (Number.isNaN(base.getTime())) return null;
+
+  const timeStr = String(timeValue || '').trim();
+  const m = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+
+  const hours = Number.parseInt(m[1], 10);
+  const minutes = Number.parseInt(m[2], 10);
+  if (
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  base.setHours(hours, minutes, 0, 0);
+  return base;
+};
+
 const requireOrganizer = (req, res) => {
   const role = req.user?.role;
   if (role !== 'organizer') {
@@ -394,8 +419,15 @@ const listApprovedEvents = async (req, res) => {
       .sort({ date: 1, time: 1, createdAt: -1 })
       .lean();
 
+    const nowMs = Date.now();
+    const upcoming = (items || []).filter((e) => {
+      const start = buildEventStartDateTime(e.date, e.time);
+      if (!start) return true; // don't hide unknown/invalid datetimes
+      return start.getTime() >= nowMs;
+    });
+
     return res.status(200).json({
-      events: items.map((e) => ({
+      events: upcoming.map((e) => ({
         id: e._id.toString(),
         name: e.name,
         description: e.description,

@@ -140,6 +140,39 @@ const MOCK_EVENTS = [
   },
 ]
 
+function buildEventStartMs({ date, dateLabel, time }, nowMs) {
+  const base = date ? new Date(date) : new Date(dateLabel)
+  if (Number.isNaN(base.getTime())) return null
+
+  const raw = String(time || '').trim()
+  if (!raw) return null
+
+  // Supports "HH:mm" (API) and "HH:mm AM/PM" (mock/UI)
+  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (ampmMatch) {
+    let hours = Number.parseInt(ampmMatch[1], 10)
+    const minutes = Number.parseInt(ampmMatch[2], 10)
+    const ampm = ampmMatch[3].toUpperCase()
+    if (hours === 12) hours = 0
+    if (ampm === 'PM') hours += 12
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+    base.setHours(hours, minutes, 0, 0)
+    return base.getTime()
+  }
+
+  const h24Match = raw.match(/^(\d{1,2}):(\d{2})$/)
+  if (h24Match) {
+    const hours = Number.parseInt(h24Match[1], 10)
+    const minutes = Number.parseInt(h24Match[2], 10)
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+    base.setHours(hours, minutes, 0, 0)
+    return base.getTime()
+  }
+
+  // If we can't parse the time, don't filter it out.
+  return null
+}
+
 function useStudentEventsData() {
   const [events, setEvents] = useState([])
   const [loadStatus, setLoadStatus] = useState('idle') // idle | loading
@@ -223,18 +256,32 @@ export function StudentDashboard({ user, onLogout }) {
   )
 
   const registeredUpcoming = useMemo(() => {
-    const sorted = [...registeredEvents].sort(
-      (a, b) => new Date(a.date || a.dateLabel).getTime() - new Date(b.date || b.dateLabel).getTime(),
-    )
-    return sorted.filter(
-      (e) => new Date(e.date || e.dateLabel).getTime() >= now.getTime(),
-    )
+    const nowMs = now.getTime()
+    const sorted = [...registeredEvents].sort((a, b) => {
+      const ta =
+        buildEventStartMs(a, nowMs) ??
+        new Date(a.date || a.dateLabel).getTime()
+      const tb =
+        buildEventStartMs(b, nowMs) ??
+        new Date(b.date || b.dateLabel).getTime()
+      return ta - tb
+    })
+    return sorted.filter((e) => {
+      const startMs = buildEventStartMs(e, nowMs)
+      const cmp = startMs ?? new Date(e.date || e.dateLabel).getTime()
+      return cmp >= nowMs
+    })
   }, [registeredEvents, now])
 
   const attendedEvents = useMemo(
     () =>
       registeredEvents.filter(
-        (e) => new Date(e.date || e.dateLabel).getTime() < now.getTime(),
+        (e) => {
+          const nowMs = now.getTime()
+          const startMs = buildEventStartMs(e, nowMs)
+          const cmp = startMs ?? new Date(e.date || e.dateLabel).getTime()
+          return cmp < nowMs
+        },
       ),
     [registeredEvents, now],
   )
@@ -795,10 +842,19 @@ function StudentEventsSection({
   const [filter, setFilter] = useState('all')
   const normalizedEvents = events?.length ? events : MOCK_EVENTS
 
+  const nowMs = Date.now()
+  const upcomingEvents = useMemo(() => {
+    return normalizedEvents.filter((event) => {
+      const startMs = buildEventStartMs(event, nowMs)
+      if (startMs == null) return true
+      return startMs >= nowMs
+    })
+  }, [normalizedEvents, nowMs])
+
   const filteredEvents =
     filter === 'all'
-      ? normalizedEvents
-      : normalizedEvents.filter((event) => event.category === filter)
+      ? upcomingEvents
+      : upcomingEvents.filter((event) => event.category === filter)
 
   return (
     <section className="space-y-6">
