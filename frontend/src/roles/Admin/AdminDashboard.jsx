@@ -187,8 +187,14 @@ export function AdminDashboard({
   const usersNeedingAttention = useMemo(() => {
     const base = [...(users || [])]
     return base
-      .sort((a, b) => (b.failedLoginAttempts || 0) - (a.failedLoginAttempts || 0))
-      .slice(0, 6)
+      .filter((u) => Boolean(u.isDeactivated) || Number(u.failedLoginAttempts ?? 0) >= 3)
+      .sort((a, b) => {
+        const aDeact = Boolean(a.isDeactivated)
+        const bDeact = Boolean(b.isDeactivated)
+        if (aDeact !== bDeact) return aDeact ? -1 : 1
+        return Number(b.failedLoginAttempts ?? 0) - Number(a.failedLoginAttempts ?? 0)
+      })
+      .slice(0, 8)
   }, [users])
 
   const sidebarItems = [
@@ -471,6 +477,12 @@ export function AdminDashboard({
                                   ? 'text-orange-700'
                                   : 'text-slate-700'
 
+                            const attentionBadge = isDeactivated
+                              ? { label: 'Deactivated', className: 'bg-red-50 text-red-700 border-red-100' }
+                              : attempts >= 3
+                                ? { label: 'Alert', className: 'bg-orange-50 text-orange-700 border-orange-100' }
+                                : null
+
                             return (
                               <tr key={u.email} className="hover:bg-slate-50 transition-colors">
                                 <td className="px-4 py-3">
@@ -502,20 +514,29 @@ export function AdminDashboard({
                                   >
                                     {statusLabel}
                                   </span>
+                                  {attentionBadge && (
+                                    <span
+                                      className={cn(
+                                        'ml-2 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border',
+                                        attentionBadge.className,
+                                      )}
+                                    >
+                                      {attentionBadge.label}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => onToggleDeactivate?.(u.email)}
-                                    className={cn(
-                                      'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors',
-                                      isDeactivated
-                                        ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                                        : 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100',
-                                    )}
-                                  >
-                                    {isDeactivated ? 'Activate' : 'Deactivate'}
-                                  </button>
+                                  {isDeactivated ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => onToggleDeactivate?.(u.email)}
+                                      className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                    >
+                                      Activate
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">—</span>
+                                  )}
                                 </td>
                               </tr>
                             )
