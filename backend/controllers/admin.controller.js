@@ -16,6 +16,13 @@ const generateRandomPassword = (length = 8) => {
   return password;
 };
 
+const printDevEmail = ({ to, subject, body }) => {
+  // eslint-disable-next-line no-console
+  console.log(
+    `\n========== DEV EMAIL ==========\nTo: ${to}\nSubject: ${subject}\n\n${body}\n===============================\n`,
+  );
+};
+
 const createUserByAdmin = async (req, res) => {
   try {
     const { name, email, role, password } = req.body || {};
@@ -28,7 +35,9 @@ const createUserByAdmin = async (req, res) => {
 
     const normalizedEmail = email.trim();
 
-    if (!USER_ROLES.includes(role)) {
+    // Admin can only create: student, organizer, facultyCoordinator (NOT admin)
+    const ADMIN_CREATABLE_ROLES = ['student', 'organizer', 'facultyCoordinator'];
+    if (!ADMIN_CREATABLE_ROLES.includes(role)) {
       return res.status(400).json({
         message:
           'Invalid role. Allowed roles are: student, organizer, facultyCoordinator',
@@ -82,7 +91,9 @@ const listUsers = async (req, res) => {
   try {
     const users = await User.find({})
       .sort({ createdAt: -1 })
-      .select('name email role createdAt updatedAt')
+      .select(
+        'name email role createdAt updatedAt failedLoginAttempts isDeactivated deactivatedAt deactivatedReason',
+      )
       .lean();
 
     return res.status(200).json({
@@ -91,6 +102,10 @@ const listUsers = async (req, res) => {
         name: u.name,
         email: u.email,
         role: u.role,
+        failedLoginAttempts: u.failedLoginAttempts ?? 0,
+        isDeactivated: Boolean(u.isDeactivated),
+        deactivatedAt: u.deactivatedAt ?? null,
+        deactivatedReason: u.deactivatedReason ?? null,
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
       })),
@@ -271,10 +286,120 @@ const getMonthlyEventStatusAnalytics = async (req, res) => {
   }
 };
 
+const deactivateUserByAdmin = async (req, res) => {
+  try {
+    const userId = req.params?.id;
+    if (!userId) {
+      return res.status(400).json({ message: 'User id is required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.role === 'admin') {
+      return res.status(403).json({ message: 'Admin account cannot be deactivated' });
+    }
+
+    user.isDeactivated = true;
+    user.deactivatedAt = new Date();
+    user.deactivatedReason = 'admin_decision';
+    user.failedLoginAttempts = 0;
+    await user.save();
+
+    logger.warn('Admin deactivated user', {
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    });
+
+    return res.status(200).json({
+      message: 'User deactivated successfully',
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        failedLoginAttempts: user.failedLoginAttempts ?? 0,
+        isDeactivated: Boolean(user.isDeactivated),
+        deactivatedAt: user.deactivatedAt ?? null,
+        deactivatedReason: user.deactivatedReason ?? null,
+      },
+    });
+  } catch (error) {
+    logger.error('Error deactivating user by admin', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const activateUserByAdmin = async (req, res) => {
+  try {
+    const userId = req.params?.id;
+    if (!userId) {
+      return res.status(400).json({ message: 'User id is required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.role === 'admin') {
+      return res.status(403).json({ message: 'Admin account cannot be activated here' });
+    }
+
+    const plainPassword = generateRandomPassword(10);
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
+
+    user.password = hashedPassword;
+    user.isDeactivated = false;
+    user.deactivatedAt = null;
+    user.deactivatedReason = null;
+    user.failedLoginAttempts = 0;
+    await user.save();
+
+    logger.info('Admin activated user and reset password', {
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    });
+
+    printDevEmail({
+      to: user.email,
+      subject: 'Your account has been reactivated',
+      body:
+        'Your account has been reactivated by the administrator.\n' +
+        `Temporary password: ${plainPassword}\n` +
+        'Please sign in and change your password immediately.',
+    });
+
+    return res.status(200).json({
+      message: 'User activated and password reset',
+      generatedPassword: plainPassword,
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        failedLoginAttempts: user.failedLoginAttempts ?? 0,
+        isDeactivated: Boolean(user.isDeactivated),
+        deactivatedAt: user.deactivatedAt ?? null,
+        deactivatedReason: user.deactivatedReason ?? null,
+      },
+    });
+  } catch (error) {
+    logger.error('Error activating user by admin', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createUserByAdmin,
   listUsers,
   updateUserByAdmin,
   getMonthlyEventStatusAnalytics,
+  deactivateUserByAdmin,
+  activateUserByAdmin,
 };
 

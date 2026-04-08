@@ -2,9 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import {
   Activity,
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
   Bell,
   Filter,
   LogOut,
@@ -14,7 +11,6 @@ import {
   MoreHorizontal,
   Pencil,
   Search,
-  ShieldCheck,
   Users,
   X,
   BarChart3,
@@ -32,8 +28,6 @@ import {
 import { ChangePasswordModal } from '../../components/ChangePasswordModal.jsx'
 
 const cn = (...classes) => classes.filter(Boolean).join(' ')
-
-const ATTEMPT_WINDOW_MINUTES = 10
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
@@ -65,18 +59,11 @@ const formatShortTime = (timestamp) => {
 export function AdminDashboard({
   user,
   onLogout,
-  loginAttempts = [],
-  lockedEmails = {},
-  deactivatedEmails = {},
-  onToggleLock,
   onToggleDeactivate,
   users = [],
   onCreateUser,
   onUpdateUser,
 }) {
-  const now = Date.now()
-  const windowMs = ATTEMPT_WINDOW_MINUTES * 60 * 1000
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [usersTab, setUsersTab] = useState('list')
@@ -168,101 +155,16 @@ export function AdminDashboard({
   }
 
   const totalUsers = users.length
-  const activeUsers = users.filter(
-    (u) => !deactivatedEmails[u.email.trim()],
-  ).length
-  const lockedCount = Object.keys(lockedEmails).length
-  const failedAttemptsToday = loginAttempts.filter((a) => {
-    if (a.success) return false
-    const d = new Date(a.timestamp)
-    const today = new Date()
-    return d.toDateString() === today.toDateString()
-  }).length
-
-  const enrichedUsers = useMemo(() => {
-    return users
-      .map((u) => {
-        const key = u.email.trim()
-        const attemptsForUser = loginAttempts.filter((a) => a.email === key)
-        const failedRecent = attemptsForUser.filter(
-          (a) => !a.success && now - a.timestamp <= windowMs,
-        )
-        const totalFailed = attemptsForUser.filter((a) => !a.success).length
-        const lastAttempt =
-          attemptsForUser.length > 0
-            ? attemptsForUser[attemptsForUser.length - 1].timestamp
-            : null
-
-        const isLocked = Boolean(lockedEmails[key])
-        const isDeactivated = Boolean(deactivatedEmails[key])
-
-        const riskScore =
-          failedRecent.length * 2 +
-          (isLocked ? 3 : 0) +
-          (isDeactivated ? 5 : 0)
-
-        return {
-          ...u,
-          key,
-          role: u.role,
-          failedRecent: failedRecent.length,
-          totalFailed,
-          lastAttempt,
-          isLocked,
-          isDeactivated,
-          riskScore,
-        }
-      })
-      .sort((a, b) => b.riskScore - a.riskScore)
-  }, [users, loginAttempts, lockedEmails, deactivatedEmails, now, windowMs])
-
-  const recentSecurityLogs = useMemo(
-    () =>
-      [...loginAttempts]
-        .slice(-10)
-        .reverse()
-        .map((a) => {
-          const matchingUser = users.find(
-            (u) => u.email.trim() === a.email,
-          )
-          const displayName = matchingUser?.username ?? a.email
-          return {
-            user: displayName,
-            action: a.success ? 'Successful login' : 'Failed login',
-            target: matchingUser ? formatRole(matchingUser.role) : 'Unknown user',
-            time: formatShortTime(a.timestamp),
-            type: a.success ? 'info' : 'danger',
-          }
-        }),
-    [loginAttempts, users],
-  )
-
-  const securityStats = useMemo(() => {
-    const total = recentSecurityLogs.length
-    const failed = recentSecurityLogs.filter((l) => l.type === 'danger').length
-    const successful = total - failed
-    return { total, failed, successful }
-  }, [recentSecurityLogs])
 
   const recentUsers = useMemo(
     () => [...users].slice(-5).reverse(),
     [users],
   )
 
-  const topFailedUsers = useMemo(
-    () =>
-      [...enrichedUsers]
-        .filter((u) => u.totalFailed > 0)
-        .sort((a, b) => b.totalFailed - a.totalFailed)
-        .slice(0, 5),
-    [enrichedUsers],
-  )
-
   const sidebarItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'users', label: 'Users & Roles', icon: Users },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'security', label: 'Security Logs', icon: ShieldCheck },
   ]
 
   return (
@@ -408,31 +310,9 @@ export function AdminDashboard({
                   {
                     label: 'Total Users',
                     value: String(totalUsers),
-                    change: '+3%',
+                    change: 'Live',
                     icon: Users,
                     color: 'bg-indigo-50 text-indigo-600',
-                  },
-                  {
-                    label: 'Active Accounts',
-                    value: String(activeUsers),
-                    change: 'Stable',
-                    icon: Activity,
-                    color: 'bg-emerald-50 text-emerald-600',
-                  },
-                  {
-                    label: 'Failed Logins Today',
-                    value: String(failedAttemptsToday),
-                    change:
-                      failedAttemptsToday > 0 ? '+security review' : 'Clean',
-                    icon: AlertTriangle,
-                    color: 'bg-orange-50 text-orange-600',
-                  },
-                  {
-                    label: 'Locked Accounts',
-                    value: String(lockedCount),
-                    change: lockedCount > 0 ? 'Attention' : 'All clear',
-                    icon: ShieldCheck,
-                    color: 'bg-purple-50 text-purple-600',
                   },
                 ].map((stat) => (
                   <div
@@ -458,10 +338,6 @@ export function AdminDashboard({
                               : 'bg-slate-50 text-slate-500',
                         )}
                       >
-                        {stat.change === '+3%' && <ArrowUpRight size={14} />}
-                        {stat.change === 'Attention' && (
-                          <ArrowDownRight size={14} />
-                        )}
                         <span>{stat.change}</span>
                       </span>
                     </div>
@@ -515,90 +391,11 @@ export function AdminDashboard({
                 </div>
                 <div className="bg-white p-6 rounded-[24px] border border-black/5 shadow-sm">
                   <h2 className="text-lg font-bold text-slate-900 mb-2">
-                    Most failed login attempts
+                    Account management
                   </h2>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Top 5 users with the highest failed login count. Sorted by total failed attempts.
+                  <p className="text-xs text-slate-500">
+                    Deactivate or activate users from the Users &amp; Roles tab.
                   </p>
-                  {topFailedUsers.length === 0 && (
-                    <p className="text-sm text-slate-500">
-                      No failed login attempts recorded yet.
-                    </p>
-                  )}
-                  <ul className="space-y-3">
-                    {topFailedUsers.map((u) => {
-                      const isDeactivated = u.isDeactivated
-                      const statusLabel = isDeactivated ? 'Deactivated' : 'Active'
-                      const statusClass = isDeactivated
-                        ? 'bg-red-50 text-red-600 border-red-100'
-                        : 'bg-emerald-50 text-emerald-600 border-emerald-100'
-
-                      return (
-                        <li
-                          key={u.email}
-                          className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-black/5 hover:bg-slate-50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                              {u.username?.charAt(0) ?? u.email.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {u.username}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {u.email}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <span
-                              className={cn(
-                                'px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-widest border',
-                                statusClass,
-                              )}
-                            >
-                              {statusLabel}
-                            </span>
-                            <span className="text-[11px] text-slate-500">
-                              Failed attempts:{' '}
-                              <span className="font-semibold text-slate-800">
-                                {u.totalFailed}
-                              </span>
-                            </span>
-                            <div className="flex gap-2 mt-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onToggleDeactivate &&
-                                  onToggleDeactivate(u.email)
-                                }
-                                className={cn(
-                                  'px-3 py-1 rounded-full text-[11px] font-semibold border transition-colors',
-                                  isDeactivated
-                                    ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                                    : 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100',
-                                )}
-                              >
-                                {isDeactivated ? 'Activate' : 'Deactivate'}
-                              </button>
-                            </div>
-                          </div>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                  {topFailedUsers.length > 0 && (
-                    <div className="mt-5 flex justify-center">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('security')}
-                        className="px-8 py-2.5 rounded-full border border-indigo-200 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
-                      >
-                        See more
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             </>
@@ -697,136 +494,7 @@ export function AdminDashboard({
             </div>
           )}
 
-          {/* Security tab */}
-          {activeTab === 'security' && (
-            <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm space-y-6">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Login security overview
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    See failed login counts for every user and decide whether to keep accounts active or deactivate them.
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <div className="px-3 py-2 rounded-2xl bg-slate-50 border border-black/5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-                      Total users
-                    </p>
-                    <p className="text-sm font-bold text-slate-900">
-                      {enrichedUsers.length}
-                    </p>
-                  </div>
-                  <div className="px-3 py-2 rounded-2xl bg-red-50 border border-red-100">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-red-500">
-                      Users with failures
-                    </p>
-                    <p className="text-sm font-bold text-red-700">
-                      {enrichedUsers.filter((u) => u.totalFailed > 0).length}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 border-b border-black/5">
-                    <tr>
-                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        User
-                      </th>
-                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        Role
-                      </th>
-                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        Total failed logins
-                      </th>
-                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        Failed in last {ATTEMPT_WINDOW_MINUTES}m
-                      </th>
-                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        Last attempt
-                      </th>
-                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        Status
-                      </th>
-                      <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        Action
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-black/5">
-                    {[...enrichedUsers]
-                      .sort((a, b) => b.totalFailed - a.totalFailed)
-                      .map((u) => {
-                        const isDeactivated = u.isDeactivated
-                        const statusLabel = isDeactivated ? 'Deactivated' : 'Active'
-                        const statusClass = isDeactivated
-                          ? 'bg-red-50 text-red-600 border-red-100'
-                          : 'bg-emerald-50 text-emerald-600 border-emerald-100'
-
-                        return (
-                          <tr key={u.email} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-8 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                                  {u.username?.charAt(0) ?? u.email.charAt(0)}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    {u.username}
-                                  </p>
-                                  <p className="text-xs text-slate-500">{u.email}</p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-8 py-4 text-xs font-bold text-slate-600">
-                              {formatRole(u.role)}
-                            </td>
-                            <td className="px-8 py-4 text-sm text-slate-700">
-                              {u.totalFailed}
-                            </td>
-                            <td className="px-8 py-4 text-sm text-slate-700">
-                              {u.failedRecent}
-                            </td>
-                            <td className="px-8 py-4 text-sm text-slate-700">
-                              {formatShortTime(u.lastAttempt)}
-                            </td>
-                            <td className="px-8 py-4">
-                              <span
-                                className={cn(
-                                  'px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border',
-                                  statusClass,
-                                )}
-                              >
-                                {statusLabel}
-                              </span>
-                            </td>
-                            <td className="px-8 py-4">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onToggleDeactivate && onToggleDeactivate(u.email)
-                                }
-                                className={cn(
-                                  'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors',
-                                  isDeactivated
-                                    ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                                    : 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100',
-                                )}
-                              >
-                                {isDeactivated ? 'Activate' : 'Deactivate'}
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {/* Security tab removed */}
 
           {/* Users tab: System Administration -> internal tabs for list / add */}
           {activeTab === 'users' && (
@@ -911,19 +579,14 @@ export function AdminDashboard({
                           <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
                             Status
                           </th>
-                          <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            Failed in last {ATTEMPT_WINDOW_MINUTES}m
-                          </th>
-                          <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            Last attempt
-                          </th>
+                          {/* login-attempt columns removed */}
                           <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
                             Actions
                           </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-black/5">
-                        {enrichedUsers.map((entry) => {
+                        {users.map((entry) => {
                           const isDeactivated = entry.isDeactivated
                           const statusLabel = isDeactivated ? 'Deactivated' : 'Active'
                           const statusClass = isDeactivated
@@ -1003,12 +666,7 @@ export function AdminDashboard({
                                   {statusLabel}
                                 </span>
                               </td>
-                              <td className="px-8 py-4 text-sm text-slate-600">
-                                {entry.failedRecent}
-                              </td>
-                              <td className="px-8 py-4 text-sm text-slate-600">
-                                {formatShortTime(entry.lastAttempt)}
-                              </td>
+                              {/* login-attempt cells removed */}
                               <td className="px-8 py-4">
                                 <div className="flex items-center gap-2">
                                   {isEditing ? (

@@ -7,24 +7,14 @@ import { FacultyCoordinatorDashboard } from './roles/FacultyCoordinator/FacultyC
 import { OrganizerDashboard } from './roles/Organizer/OrganizerDashboard.jsx'
 import { StudentDashboard } from './roles/Student/StudentDashboard.jsx'
 
-const MAX_FAILED_ATTEMPTS = 5
 const ATTEMPT_WINDOW_MINUTES = 10
 
 // Prefer Vite env, fall back to local dev URL
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
-// Dummy failed login attempts so "Most failed login attempts" shows data (counts > 0)
-const _now = Date.now()
-const _hour = 60 * 60 * 1000
-const DUMMY_FAILED_ATTEMPTS = [
-  { email: 'student1@university.ac.lk', success: false, timestamp: _now - 3 * _hour },
-  { email: 'student1@university.ac.lk', success: false, timestamp: _now - 2 * _hour },
-  { email: 'student1@university.ac.lk', success: false, timestamp: _now - 1 * _hour },
-  { email: 'faculty1@university.ac.lk', success: false, timestamp: _now - 5 * _hour },
-  { email: 'faculty1@university.ac.lk', success: false, timestamp: _now - 4 * _hour },
-  { email: 'organizer1@university.ac.lk', success: false, timestamp: _now - 6 * _hour },
-]
+// NOTE: no mock login-attempt data; UI reflects only what happens in this session.
+const DUMMY_FAILED_ATTEMPTS = []
 
 const AppContent = () => {
   const [currentUser, setCurrentUser] = useState(null)
@@ -32,10 +22,8 @@ const AppContent = () => {
 
   const [adminUsers, setAdminUsers] = useState([])
 
-  // Simple in-memory security analytics for admin (pre-seeded with dummy failed attempts)
+  // Client-side security analytics for admin (UI only, current session)
   const [loginAttempts, setLoginAttempts] = useState(DUMMY_FAILED_ATTEMPTS)
-  const [lockedEmails, setLockedEmails] = useState({})
-  const [deactivatedEmails, setDeactivatedEmails] = useState({})
 
   // On first load, try to restore user from localStorage so refresh keeps user logged in.
   useEffect(() => {
@@ -72,6 +60,8 @@ const AppContent = () => {
             email: u.email,
             username: u.name,
             role: u.role,
+            isDeactivated: Boolean(u.isDeactivated),
+            failedLoginAttempts: u.failedLoginAttempts ?? 0,
           })),
         )
       })
@@ -85,102 +75,54 @@ const AppContent = () => {
     const timestamp = Date.now()
 
     setLoginAttempts((prev) => {
-      const next = [...prev.slice(-199), { email: normalizedEmail, success, timestamp }]
-
-      if (!success) {
-        setLockedEmails((prevLocked) => {
-          const now = Date.now()
-          const windowMs = ATTEMPT_WINDOW_MINUTES * 60 * 1000
-          const failedForUser = next.filter(
-            (a) =>
-              a.email === normalizedEmail &&
-              !a.success &&
-              now - a.timestamp <= windowMs,
-          )
-
-          if (failedForUser.length >= MAX_FAILED_ATTEMPTS) {
-            if (prevLocked[normalizedEmail]) return prevLocked
-            return {
-              ...prevLocked,
-              [normalizedEmail]: {
-                email: normalizedEmail,
-                lockedAt: now,
-                reason: 'too_many_failed_logins',
-                failuresInWindow: failedForUser.length,
-              },
-            }
-          }
-
-          return prevLocked
-        })
-      }
-
-      return next
+      return [...prev.slice(-199), { email: normalizedEmail, success, timestamp }]
     })
   }
 
-  const handleToggleLock = (email) => {
+  const handleToggleDeactivate = async (email) => {
     const key = email.trim()
-    setLockedEmails((prev) => {
-      const next = { ...prev }
-      if (next[key]) {
-        delete next[key]
-      } else {
-        next[key] = {
-          email: key,
-          lockedAt: Date.now(),
-          reason: 'manual_lock',
-        }
-      }
-      return next
-    })
-  }
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      alert('You are not logged in.')
+      return
+    }
 
-  const handleToggleDeactivate = (email) => {
-    const key = email.trim()
-    setDeactivatedEmails((prev) => {
-      const next = { ...prev }
-      if (next[key]) {
-        delete next[key]
-      } else {
-        next[key] = {
-          email: key,
-          deactivatedAt: Date.now(),
-          reason: 'admin_decision',
-        }
-        setLockedEmails((prevLocked) => ({
-          ...prevLocked,
-          [key]: {
-            email: key,
-            lockedAt: Date.now(),
-            reason: 'deactivated',
-          },
-        }))
+    const target = adminUsers.find((u) => u.email.trim() === key)
+    if (!target?.id) return
+
+    try {
+      const endpoint = target.isDeactivated
+        ? `${API_BASE_URL}/api/admin/users/${target.id}/activate`
+        : `${API_BASE_URL}/api/admin/users/${target.id}/deactivate`
+
+      const res = await axios.post(
+        endpoint,
+        {},
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+
+      const updated = res.data?.user
+      if (updated?.id) {
+        setAdminUsers((prev) =>
+          prev.map((u) =>
+            u.id === updated.id
+              ? {
+                  ...u,
+                  isDeactivated: Boolean(updated.isDeactivated),
+                  failedLoginAttempts: updated.failedLoginAttempts ?? 0,
+                }
+              : u,
+          ),
+        )
       }
-      return next
-    })
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Unable to update user status.')
+    }
   }
 
   const handleLogin = async (email, password) => {
     const trimmedEmail = email.trim()
     const trimmedPassword = password.trim()
-
-    if (deactivatedEmails[trimmedEmail]) {
-      setError(
-        'Your account has been deactivated. Please contact the administrator.',
-      )
-      setCurrentUser(null)
-      recordLoginAttempt(trimmedEmail, false)
-      return
-    }
-
-    if (lockedEmails[trimmedEmail]) {
-      setError(
-        'Your account is temporarily locked due to too many failed login attempts.',
-      )
-      setCurrentUser(null)
-      return
-    }
 
     try {
       const response = await axios.post(
@@ -359,9 +301,13 @@ const AppContent = () => {
 
   const securityProps = {
     loginAttempts,
-    lockedEmails,
-    deactivatedEmails,
-    onToggleLock: handleToggleLock,
+    lockedEmails: {},
+    deactivatedEmails: Object.fromEntries(
+      adminUsers
+        .filter((u) => u.isDeactivated)
+        .map((u) => [u.email.trim(), { email: u.email.trim() }]),
+    ),
+    onToggleLock: null,
     onToggleDeactivate: handleToggleDeactivate,
   }
 
