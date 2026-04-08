@@ -502,6 +502,40 @@ const activateUserByAdmin = async (req, res) => {
   }
 };
 
+const deleteUserByAdmin = async (req, res) => {
+  try {
+    const userId = req.params?.id;
+    if (!userId) {
+      return res.status(400).json({ message: 'User id is required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.role === 'admin') {
+      return res.status(403).json({ message: 'Admin account cannot be deleted' });
+    }
+
+    await User.deleteOne({ _id: user._id });
+
+    logger.warn('Admin deleted user', {
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    });
+
+    return res.status(200).json({
+      message: 'User deleted successfully',
+      deletedUserId: user._id.toString(),
+    });
+  } catch (error) {
+    logger.error('Error deleting user by admin', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createUserByAdmin,
   listUsers,
@@ -510,5 +544,6 @@ module.exports = {
   getMonthlyLoginTrafficAnalytics,
   deactivateUserByAdmin,
   activateUserByAdmin,
+  deleteUserByAdmin,
 };
 

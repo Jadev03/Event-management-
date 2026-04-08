@@ -301,6 +301,32 @@ const AppContent = () => {
     }
   }
 
+  const handleDeleteUser = async (id) => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      alert('You are not logged in.')
+      return false
+    }
+
+    try {
+      const res = await axios.delete(`${API_BASE_URL}/api/admin/users/${id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+
+      const deletedUserId = res.data?.deletedUserId
+      if (deletedUserId) {
+        setAdminUsers((prev) => prev.filter((u) => u.id !== deletedUserId))
+      } else {
+        setAdminUsers((prev) => prev.filter((u) => u.id !== id))
+      }
+
+      return true
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Unable to delete user.')
+      return false
+    }
+  }
+
   const securityProps = {
     loginAttempts,
     lockedEmails: {},
@@ -333,6 +359,7 @@ const AppContent = () => {
           users={adminUsers}
           onCreateUser={handleCreateUser}
           onUpdateUser={handleUpdateUser}
+          onDeleteUser={handleDeleteUser}
         />
       )
     default:

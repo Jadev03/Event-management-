@@ -11,6 +11,7 @@ import {
   MoreHorizontal,
   Pencil,
   Search,
+  Trash2,
   Users,
   X,
   BarChart3,
@@ -63,6 +64,7 @@ export function AdminDashboard({
   users = [],
   onCreateUser,
   onUpdateUser,
+  onDeleteUser,
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
@@ -78,6 +80,9 @@ export function AdminDashboard({
   const [editingEmail, setEditingEmail] = useState('')
   const [editingRole, setEditingRole] = useState('student')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+
+  const [deleteCandidate, setDeleteCandidate] = useState(null) // { id, email, username }
+  const [isDeletingUser, setIsDeletingUser] = useState(false)
 
   const [monthlyAnalytics, setMonthlyAnalytics] = useState([])
   const [monthlyStatus, setMonthlyStatus] = useState('idle') // idle | loading
@@ -209,6 +214,60 @@ export function AdminDashboard({
         open={isChangePasswordOpen}
         onClose={() => setIsChangePasswordOpen(false)}
       />
+
+      {/* Delete confirmation modal */}
+      {deleteCandidate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm delete user"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !isDeletingUser) {
+              setDeleteCandidate(null)
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-[24px] bg-white border border-black/5 shadow-xl p-6">
+            <h3 className="text-lg font-bold text-slate-900">
+              Are you sure?
+            </h3>
+            <p className="text-sm text-slate-600 mt-2">
+              This will permanently delete{' '}
+              <span className="font-semibold text-slate-900">
+                {deleteCandidate.username}
+              </span>{' '}
+              (<span className="font-mono text-xs">{deleteCandidate.email}</span>)
+              from the system.
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={isDeletingUser}
+                onClick={() => setDeleteCandidate(null)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-60"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingUser}
+                onClick={async () => {
+                  if (!onDeleteUser) return
+                  setIsDeletingUser(true)
+                  const ok = await onDeleteUser(deleteCandidate.id)
+                  setIsDeletingUser(false)
+                  if (ok) setDeleteCandidate(null)
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-red-100 bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-60"
+              >
+                {isDeletingUser ? 'Deleting…' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Sidebar / Drawer */}
       <aside className="bg-white border-r border-black/5 flex flex-col z-20 transition-all duration-200" style={{ width: isSidebarOpen ? 260 : 80 }}>
         <div className="p-6 flex items-center justify-between">
@@ -952,6 +1011,20 @@ export function AdminDashboard({
                                         )}
                                       >
                                         {isDeactivated ? 'Activate' : 'Deactivate'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setDeleteCandidate({
+                                            id: entry.id,
+                                            email: entry.email,
+                                            username: entry.username,
+                                          })
+                                        }}
+                                        className="p-2 rounded-xl border border-red-100 bg-white text-red-700 hover:bg-red-50 transition-colors"
+                                        aria-label={`Delete ${entry.username}`}
+                                      >
+                                        <Trash2 size={18} />
                                       </button>
                                       <button
                                         type="button"
