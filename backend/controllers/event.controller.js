@@ -699,7 +699,9 @@ const getOrganizerOverview = async (req, res) => {
     const deny = requireOrganizer(req, res);
     if (deny) return;
 
-    const organizerId = req.user.id;
+    const organizerId = mongoose.Types.ObjectId.createFromHexString(
+      String(req.user.id),
+    );
     const events = await Event.find({ createdBy: organizerId }).lean();
     const totalEvents = events.length;
 
@@ -715,10 +717,13 @@ const getOrganizerOverview = async (req, res) => {
     const eventIds = events.map((e) => e._id);
 
     // Aggregate attendance (each QR scan = one attended)
-    const attendanceAgg = await Attendance.aggregate([
-      { $match: { eventId: { $in: eventIds } } },
-      { $group: { _id: '$eventId', scans: { $sum: 1 } } },
-    ]);
+    const attendanceAgg =
+      eventIds.length === 0
+        ? []
+        : await Attendance.aggregate([
+            { $match: { eventId: { $in: eventIds } } },
+            { $group: { _id: '$eventId', scans: { $sum: 1 } } },
+          ]);
     const scansByEventId = new Map(
       attendanceAgg.map((x) => [String(x._id), x.scans])
     );
@@ -728,10 +733,13 @@ const getOrganizerOverview = async (req, res) => {
     );
 
     // Aggregate registrations (students registered per event)
-    const registrationsAgg = await Registration.aggregate([
-      { $match: { eventId: { $in: eventIds } } },
-      { $group: { _id: '$eventId', registrations: { $sum: 1 } } },
-    ]);
+    const registrationsAgg =
+      eventIds.length === 0
+        ? []
+        : await Registration.aggregate([
+            { $match: { eventId: { $in: eventIds } } },
+            { $group: { _id: '$eventId', registrations: { $sum: 1 } } },
+          ]);
     const registrationsByEventId = new Map(
       registrationsAgg.map((x) => [String(x._id), x.registrations])
     );
