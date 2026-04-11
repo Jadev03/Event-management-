@@ -1,27 +1,26 @@
 export const users = [
   {
-    email: 'student1@university.ac.lk',
+    email: 'banuharan01@gmail.com',
     password: 'student123',
-    username: 'Student One',
+    username: 'Banuharan',
     role: 'student',
   },
   {
-    email: 'faculty1@university.ac.lk',
+    email: 'jathu01@gmail.com',
     password: 'faculty123',
-    username: 'Faculty Coordinator',
+    username: 'Jathushikan',
     role: 'facultyCoordinator',
   },
   {
-    email: 'organizer1@university.ac.lk',
+    email: 'banusan01@gmail.com',
     password: 'organizer123',
-    username: 'Event Organizer',
+    username: 'Banusan',
     role: 'organizer',
   },
   {
-    email: 'admin1@university.ac.lk',
+    email: 'tharshi01@gmail.com',
     password: 'admin123',
-    username: 'System Admin',
+    username: 'Tharsi',
     role: 'admin',
   },
 ]
-

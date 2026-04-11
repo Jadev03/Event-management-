@@ -57,15 +57,33 @@ npm run seed:faculty
 npm run seed:all
 ```
 
+### Update existing users (overwrite profile only)
+
+If users are already in the database, a plain `npm run seed:users` skips them. To apply the seed file’s **name and email** on the **same** user documents (password, role, and links to events/registrations are unchanged), set `SEED_OVERWRITE_EXISTING_USERS` to `true`.
+
+**Windows (PowerShell)** — example using this repo’s path (change `cd` if your clone lives elsewhere):
+
+```powershell
+cd c:\Users\THABENDRA\SLIIT\Event-management-\backend
+$env:SEED_OVERWRITE_EXISTING_USERS="true"; npm run seed:users
+```
+
+From the repository root (any path):
+
+```powershell
+cd backend
+$env:SEED_OVERWRITE_EXISTING_USERS="true"; npm run seed:users
+```
+
 ### Default users (created by `npm run seed:users`)
 Use these accounts to log in after seeding:
 
 | role | name | email | password |
 | --- | --- | --- | --- |
-| student | Student One | student1@university.ac.lk | student123 |
-| facultyCoordinator | Faculty Coordinator | faculty1@university.ac.lk | faculty123 |
-| organizer | Event Organizer | organizer1@university.ac.lk | organizer123 |
-| admin | System Admin | admin1@university.ac.lk | admin123 |
+| student | Banuharan | banuharan01@gmail.com | student123 |
+| facultyCoordinator | Jathushikan | jathu01@gmail.com | faculty123 |
+| organizer | Banusan | banusan01@gmail.com | organizer123 |
+| admin | Tharsi | tharshi01@gmail.com | admin123 |
 
 ### Run the backend
 ```bash

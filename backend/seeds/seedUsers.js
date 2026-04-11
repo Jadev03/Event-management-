@@ -9,27 +9,47 @@ dotenv.config();
 const MONGODB_URI =
   process.env.MONGODB_URI || 'mongodb://localhost:27017/event_management';
 
-const upsertUserByEmail = async ({ email, password, name, role }) => {
+const upsertUserByEmail = async ({
+  email,
+  legacyEmail,
+  password,
+  name,
+  role,
+}) => {
   const normalizedEmail = String(email).trim();
-  const existing = await User.findOne({ email: normalizedEmail }).lean();
+  const normalizedLegacy =
+    legacyEmail != null && String(legacyEmail).trim() !== ''
+      ? String(legacyEmail).trim()
+      : null;
 
   const overwriteExistingUsers =
     process.env.SEED_OVERWRITE_EXISTING_USERS === 'true';
 
+  const existingByTarget = await User.findOne({
+    email: normalizedEmail,
+  }).lean();
+
+  const existingByLegacy =
+    !existingByTarget && normalizedLegacy
+      ? await User.findOne({ email: normalizedLegacy }).lean()
+      : null;
+
+  const existing = existingByTarget || existingByLegacy;
+
   if (existing) {
     if (!overwriteExistingUsers) {
-      // Skip existing users (do not overwrite password).
       return { action: 'skipped', email: normalizedEmail };
     }
 
-    // Overwrite password + profile fields for deterministic dev seeding.
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    // Same MongoDB _id: events/registrations stay linked. Only refresh
+    // display name and/or email — never password or role.
+    const filter = { _id: existing._id };
+    const set = { name };
+    if (existing.email !== normalizedEmail) {
+      set.email = normalizedEmail;
+    }
 
-    await User.updateOne(
-      { email: normalizedEmail },
-      { $set: { password: hashedPassword, name, role } },
-    );
+    await User.updateOne(filter, { $set: set });
     return { action: 'updated', email: normalizedEmail };
   }
 
@@ -51,27 +71,31 @@ const seedUsers = async () => {
 
     const plainUsers = [
       {
-        email: 'student1@university.ac.lk',
+        email: 'banuharan01@gmail.com',
+        legacyEmail: 'student1@university.ac.lk',
         password: 'student123',
-        name: 'Student One',
+        name: 'Banuharan',
         role: 'student',
       },
       {
-        email: 'faculty1@university.ac.lk',
+        email: 'jathu01@gmail.com',
+        legacyEmail: 'faculty1@university.ac.lk',
         password: 'faculty123',
-        name: 'Faculty Coordinator',
+        name: 'Jathushikan',
         role: 'facultyCoordinator',
       },
       {
-        email: 'organizer1@university.ac.lk',
+        email: 'banusan01@gmail.com',
+        legacyEmail: 'organizer1@university.ac.lk',
         password: 'organizer123',
-        name: 'Event Organizer',
+        name: 'Banusan',
         role: 'organizer',
       },
       {
-        email: 'admin1@university.ac.lk',
+        email: 'tharshi01@gmail.com',
+        legacyEmail: 'admin1@university.ac.lk',
         password: 'admin123',
-        name: 'System Admin',
+        name: 'Tharsi',
         role: 'admin',
       },
     ];
@@ -82,8 +106,8 @@ const seedUsers = async () => {
     for (const u of plainUsers) {
       const result = await upsertUserByEmail(u);
       if (result.action === 'inserted') inserted += 1;
-      else skipped += 1;
-      if (result.action === 'updated') updated += 1;
+      else if (result.action === 'skipped') skipped += 1;
+      else if (result.action === 'updated') updated += 1;
     }
 
     logger.info('Seed users done', { inserted, skipped, updated });
