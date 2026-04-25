@@ -8,6 +8,12 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    registrationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Registration',
+      default: null,
+      index: true,
+    },
     organizerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -29,6 +35,13 @@ const attendanceSchema = new mongoose.Schema(
 );
 
 attendanceSchema.index({ eventId: 1, rawQr: 1 }, { unique: true });
+attendanceSchema.index(
+  { eventId: 1, registrationId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { registrationId: { $type: 'objectId' } },
+  },
+);
 
 const Attendance = mongoose.model('Attendance', attendanceSchema);
 

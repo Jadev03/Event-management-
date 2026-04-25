@@ -353,12 +353,9 @@ export function StudentDashboard({ user, onLogout }) {
     [],
   )
 
-  // Load registrations from backend so they match server (no local random state)
-  useEffect(() => {
+  const fetchRegistrations = () => {
     const accessToken = localStorage.getItem('accessToken')
-    if (!accessToken) {
-      return
-    }
+    if (!accessToken) return
 
     axios
       .get(`${API_BASE_URL}/api/events/student/registrations`, {
@@ -373,9 +370,19 @@ export function StudentDashboard({ user, onLogout }) {
         setRegistrations(fromServer)
       })
       .catch(() => {
-        // Keep current state (UI will still show Browse Events)
+        // Keep current state
       })
+  }
+
+  // Load registrations from backend so they match server (no local random state)
+  useEffect(() => {
+    fetchRegistrations()
   }, [API_BASE_URL])
+
+  // When coming back to dashboard, refresh counts
+  useEffect(() => {
+    if (activeTab === 'dashboard') fetchRegistrations()
+  }, [activeTab])
 
   const handleRegisterForEvent = async (event) => {
     const ok = window.confirm(
@@ -659,7 +666,17 @@ export function StudentDashboard({ user, onLogout }) {
             />
           )}
           {activeTab === 'tickets' && (
-            <StudentTicketsSection user={user} events={registeredEvents} />
+            <StudentTicketsSection
+              user={user}
+              events={registeredEvents}
+              onCanceled={(eventId) => {
+                setRegistrations((prev) => {
+                  const next = { ...(prev || {}) }
+                  delete next[eventId]
+                  return next
+                })
+              }}
+            />
           )}
         </main>
       </div>
@@ -999,19 +1016,90 @@ function StudentEventsSection({
   )
 }
 
-function StudentTicketsSection({ user, events }) {
-  const tickets = useMemo(
-    () =>
-      (events?.length ? events : []).map((event, idx) => ({
-        event,
-        id: `TKT-${String(99283 + idx).padStart(5, '0')}-STU`,
-        userName: user.username,
-        status: 'valid',
-      })),
-    [user.username],
-  )
+function StudentTicketsSection({ user, events, onCanceled }) {
+  const [tickets, setTickets] = useState([])
+  const [ticketsStatus, setTicketsStatus] = useState('idle') // idle | loading
+  const [ticketsError, setTicketsError] = useState('')
+  const [ticketToCancel, setTicketToCancel] = useState(null)
+  const [isCanceling, setIsCanceling] = useState(false)
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      setTickets([])
+      setTicketsError('You are not logged in.')
+      return
+    }
+
+    setTicketsStatus('loading')
+    setTicketsError('')
+    axios
+      .get(`${API_BASE_URL}/api/events/student/tickets`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        setTickets(res.data?.tickets ?? [])
+      })
+      .catch((e) => {
+        setTickets([])
+        setTicketsError(
+          e?.response?.data?.message || 'Unable to load tickets from server.',
+        )
+      })
+      .finally(() => setTicketsStatus('idle'))
+  }, [])
+
+  const visibleTickets = useMemo(() => {
+    const nowMs = Date.now()
+    return (tickets || [])
+      .filter((t) => t?.status !== 'canceled')
+      .filter((t) => {
+        const startMs = buildEventStartMs(
+          {
+            date: t?.event?.date,
+            dateLabel: t?.event?.date,
+            time: t?.event?.time,
+          },
+          nowMs,
+        )
+        if (startMs == null) return true
+        return startMs >= nowMs
+      })
+  }, [tickets])
 
   const cardRefs = useRef({})
+
+  const cancelTicket = async (ticket) => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      alert('You are not logged in.')
+      return
+    }
+
+    try {
+      setIsCanceling(true)
+      await axios.post(
+        `${API_BASE_URL}/api/events/${ticket.event.id}/cancel`,
+        {},
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      // remove from "My Tickets" UI immediately
+      setTickets((prev) => (prev || []).filter((t) => t.id !== ticket.id))
+      try {
+        onCanceled?.(ticket.event.id)
+      } catch {
+        // ignore
+      }
+      setTicketToCancel(null)
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        'Unable to cancel registration. Please try again.'
+      alert(msg)
+    } finally {
+      setIsCanceling(false)
+    }
+  }
 
   const downloadTicketPdf = async (ticketId) => {
     const node = cardRefs.current[ticketId]
@@ -1060,7 +1148,23 @@ function StudentTicketsSection({ user, events }) {
         </p>
       </div>
 
-      {tickets.map((ticket) => (
+      {ticketsError && (
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {ticketsError}
+        </div>
+      )}
+
+      {ticketsStatus === 'loading' && visibleTickets.length === 0 && (
+        <p className="text-sm text-slate-600">Loading tickets…</p>
+      )}
+
+      {visibleTickets.length === 0 && ticketsStatus !== 'loading' && (
+        <div className="rounded-2xl border border-black/5 bg-white px-6 py-5 text-sm text-slate-600">
+          You don&apos;t have any active tickets.
+        </div>
+      )}
+
+      {visibleTickets.map((ticket) => (
         <div key={ticket.id} className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Ticket card */}
           <motion.div
@@ -1078,7 +1182,7 @@ function StudentTicketsSection({ user, events }) {
                   Confirmed ticket
                 </span>
                 <h3 className="text-2xl font-bold text-white mt-4 leading-tight">
-                  {ticket.event.title}
+                  {ticket.event.name}
                 </h3>
               </div>
             </div>
@@ -1089,7 +1193,7 @@ function StudentTicketsSection({ user, events }) {
                 <div className="p-6 bg-white rounded-[32px] border-2 border-dashed border-indigo-100 flex flex-col items-center">
                   <div className="p-4 bg-slate-50 rounded-2xl border border-black/5 mb-4">
                     <QRCodeSVG
-                      value={`ticket:${ticket.id}`}
+                      value={`reg:${ticket.id}`}
                       size={180}
                       level="H"
                     />
@@ -1106,7 +1210,11 @@ function StudentTicketsSection({ user, events }) {
                     Date &amp; time
                   </p>
                   <p className="text-sm font-bold text-slate-900">
-                    {ticket.event.dateLabel}
+                    {new Date(ticket.event.date).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: '2-digit',
+                      year: 'numeric',
+                    })}
                   </p>
                   <p className="text-xs text-slate-500">{ticket.event.time}</p>
                 </div>
@@ -1115,7 +1223,7 @@ function StudentTicketsSection({ user, events }) {
                     Location
                   </p>
                   <p className="text-sm font-bold text-slate-900">
-                    {ticket.event.location}
+                    {ticket.event.place}
                   </p>
                   <p className="text-xs text-slate-500">Main campus</p>
                 </div>
@@ -1124,7 +1232,7 @@ function StudentTicketsSection({ user, events }) {
                     Attendee
                   </p>
                   <p className="text-sm font-bold text-slate-900">
-                    {ticket.userName}
+                    {user.username}
                   </p>
                   <p className="text-xs text-slate-500">Student</p>
                 </div>
@@ -1149,12 +1257,10 @@ function StudentTicketsSection({ user, events }) {
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  navigator.clipboard?.writeText(`ticket:${ticket.id}`)
-                }
-                className="flex items-center gap-2 text-slate-600 font-bold text-sm hover:text-indigo-600 transition-colors"
+                onClick={() => setTicketToCancel(ticket)}
+                className="text-red-600 font-bold text-sm hover:text-red-700 transition-colors"
               >
-                <Share2 size={18} /> Share
+                Cancel
               </button>
             </div>
           </motion.div>
@@ -1208,6 +1314,44 @@ function StudentTicketsSection({ user, events }) {
           </div>
         </div>
       ))}
+
+      {ticketToCancel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white border border-black/5 shadow-2xl overflow-hidden">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-slate-900">
+                Cancel ticket?
+              </h3>
+              <p className="text-sm text-slate-600 mt-2">
+                Are you sure you want to cancel your ticket for{' '}
+                <span className="font-semibold text-slate-900">
+                  {ticketToCancel?.event?.name || 'this event'}
+                </span>
+                ?
+              </p>
+            </div>
+
+            <div className="px-6 pb-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setTicketToCancel(null)}
+                disabled={isCanceling}
+                className="px-4 py-2.5 rounded-2xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelTicket(ticketToCancel)}
+                disabled={isCanceling}
+                className="px-4 py-2.5 rounded-2xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isCanceling ? 'Canceling…' : 'Yes, cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

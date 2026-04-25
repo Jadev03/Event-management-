@@ -13,6 +13,8 @@ const {
   getOrganizerOverview,
   registerForEvent,
   getStudentRegistrations,
+  getStudentTickets,
+  cancelMyRegistration,
   getOrganizerMonthlyEventStatusAnalytics,
 } = require('../controllers/event.controller');
 
@@ -30,6 +32,8 @@ router.post('/:id/register', registerForEvent);
 
 // Student endpoints
 router.get('/student/registrations', getStudentRegistrations);
+router.get('/student/tickets', getStudentTickets);
+router.post('/:id/cancel', cancelMyRegistration);
 
 // Faculty coordinator endpoints
 router.get('/pending', listPendingEvents);

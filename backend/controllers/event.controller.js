@@ -313,21 +313,50 @@ const checkInQr = async (req, res) => {
       return res.status(400).json({ message: 'rawQr is required' });
     }
 
+    const match = rawQr.match(/^reg:(?<id>[a-fA-F0-9]{24})$/);
+    if (!match?.groups?.id) {
+      return res.status(400).json({
+        message: 'Invalid ticket QR (expected format: reg:<registrationId>)',
+      });
+    }
+
+    const reg = await Registration.findById(match.groups.id)
+      .populate('userId', 'name email username')
+      .lean();
+    if (!reg) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    if (String(reg.eventId) !== String(event._id)) {
+      return res.status(409).json({ message: 'Ticket is not for this event' });
+    }
+    if (reg.canceledAt) {
+      return res.status(409).json({ message: 'Ticket is canceled (invalid)' });
+    }
+
     const created = await Attendance.create({
       eventId: event._id,
+      registrationId: reg._id,
       organizerId: req.user.id,
       rawQr,
       scannedAt: new Date(),
     });
 
     return res.status(201).json({
-      message: 'QR scanned and recorded',
+      message: 'Ticket valid. Check-in recorded.',
       checkIn: {
         id: created._id.toString(),
         eventId: created.eventId.toString(),
+        registrationId: created.registrationId?.toString?.() || null,
         rawQr: created.rawQr,
         scannedAt: created.scannedAt,
       },
+      attendee: reg.userId
+        ? {
+            id: reg.userId._id?.toString?.() || null,
+            name: reg.userId.name || reg.userId.username || '',
+            email: reg.userId.email || '',
+          }
+        : null,
     });
   } catch (error) {
     if (error?.code === 11000) {
@@ -493,8 +522,8 @@ const registerForEvent = async (req, res) => {
     const existing = await Registration.findOne({
       eventId: event._id,
       userId: req.user.id,
-    }).lean();
-    if (existing) {
+    });
+    if (existing && !existing.canceledAt) {
       return res.status(409).json({ message: 'You are already registered' });
     }
 
@@ -507,11 +536,18 @@ const registerForEvent = async (req, res) => {
         .json({ message: 'This event is fully booked. No seats available.' });
     }
 
-    const reg = await Registration.create({
-      eventId: event._id,
-      userId: req.user.id,
-      registeredAt: new Date(),
-    });
+    const reg =
+      existing && existing.canceledAt
+        ? await Registration.findByIdAndUpdate(
+            existing._id,
+            { $set: { canceledAt: null, registeredAt: new Date() } },
+            { new: true },
+          )
+        : await Registration.create({
+            eventId: event._id,
+            userId: req.user.id,
+            registeredAt: new Date(),
+          });
 
     const newCount = currentCount + 1;
 
@@ -899,7 +935,10 @@ const getStudentRegistrations = async (req, res) => {
     const deny = requireStudent(req, res);
     if (deny) return;
 
-    const regs = await Registration.find({ userId: req.user.id })
+    const regs = await Registration.find({
+      userId: req.user.id,
+      canceledAt: null,
+    })
       .populate('eventId')
       .lean();
 
@@ -927,6 +966,96 @@ const getStudentRegistrations = async (req, res) => {
   }
 };
 
+const cancelMyRegistration = async (req, res) => {
+  try {
+    const deny = requireStudent(req, res);
+    if (deny) return;
+
+    const eventId = req.params?.id;
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event id is required' });
+    }
+
+    const event = await Event.findById(eventId).lean();
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const start = buildEventStartDateTime(event.date, event.time);
+    if (start && start.getTime() <= Date.now()) {
+      return res.status(409).json({
+        message: 'You cannot cancel after the event has started',
+      });
+    }
+
+    const reg = await Registration.findOne({
+      eventId: event._id,
+      userId: req.user.id,
+      canceledAt: null,
+    });
+    if (!reg) {
+      return res.status(404).json({ message: 'Active registration not found' });
+    }
+
+    reg.canceledAt = new Date();
+    await reg.save();
+
+    return res.status(200).json({
+      message: 'Registration canceled',
+      registration: {
+        id: reg._id.toString(),
+        eventId: reg.eventId.toString(),
+        userId: reg.userId.toString(),
+        canceledAt: reg.canceledAt,
+      },
+    });
+  } catch (error) {
+    logger.error('Error canceling registration', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const getStudentTickets = async (req, res) => {
+  try {
+    const deny = requireStudent(req, res);
+    if (deny) return;
+
+    const regs = await Registration.find({ userId: req.user.id })
+      .sort({ registeredAt: -1 })
+      .populate('eventId')
+      .lean();
+
+    const tickets = (regs || [])
+      .map((r) => {
+        const e = r.eventId;
+        if (!e) return null;
+        return {
+          id: r._id.toString(),
+          status: r.canceledAt ? 'canceled' : 'valid',
+          registeredAt: r.registeredAt,
+          canceledAt: r.canceledAt || null,
+          event: {
+            id: e._id.toString(),
+            name: e.name,
+            description: e.description,
+            type: e.type,
+            date: e.date,
+            time: e.time,
+            place: e.place,
+            thumbnailUrl: e.thumbnailUrl,
+            status: e.status,
+          },
+        };
+      })
+      .filter(Boolean);
+
+    return res.status(200).json({ tickets });
+  } catch (error) {
+    logger.error('Error listing student tickets', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createEvent,
   listMyEvents,
@@ -942,5 +1071,7 @@ module.exports = {
   getOrganizerMonthlyEventStatusAnalytics,
   registerForEvent,
   getStudentRegistrations,
+  getStudentTickets,
+  cancelMyRegistration,
 };
 

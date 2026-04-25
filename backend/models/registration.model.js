@@ -18,6 +18,11 @@ const registrationSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    canceledAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true }
 );
