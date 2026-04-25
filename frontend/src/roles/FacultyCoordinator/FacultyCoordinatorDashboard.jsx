@@ -490,6 +490,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                   </div>
                   <button
                     type="button"
+                    onClick={() => setActiveTab('events')}
                     className="w-full mt-8 py-3 rounded-2xl border border-indigo-100 text-indigo-600 font-bold text-sm hover:bg-indigo-50 transition-colors"
                   >
                     Browse All Academic Events
