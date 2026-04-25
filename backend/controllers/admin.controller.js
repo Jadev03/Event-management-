@@ -93,7 +93,7 @@ const listUsers = async (req, res) => {
     const users = await User.find({ role: { $ne: 'admin' } })
       .sort({ createdAt: -1 })
       .select(
-        'name email role createdAt updatedAt failedLoginAttempts isDeactivated deactivatedAt deactivatedReason',
+        'name email role createdAt updatedAt failedLoginAttempts loginSecurityAlertActive loginSecurityAlertTriggeredAt loginSecurityAlertReadAt isDeactivated deactivatedAt deactivatedReason',
       )
       .lean();
 
@@ -104,6 +104,9 @@ const listUsers = async (req, res) => {
         email: u.email,
         role: u.role,
         failedLoginAttempts: u.failedLoginAttempts ?? 0,
+        loginSecurityAlertActive: Boolean(u.loginSecurityAlertActive),
+        loginSecurityAlertTriggeredAt: u.loginSecurityAlertTriggeredAt ?? null,
+        loginSecurityAlertReadAt: u.loginSecurityAlertReadAt ?? null,
         isDeactivated: Boolean(u.isDeactivated),
         deactivatedAt: u.deactivatedAt ?? null,
         deactivatedReason: u.deactivatedReason ?? null,
@@ -113,6 +116,42 @@ const listUsers = async (req, res) => {
     });
   } catch (error) {
     logger.error('Error listing users', { message: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+const markLoginSecurityAlertRead = async (req, res) => {
+  try {
+    const userId = req.params?.id;
+    if (!userId) {
+      return res.status(400).json({ message: 'User id is required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (user.role === 'admin') {
+      return res.status(403).json({ message: 'Cannot mark admin alerts here' });
+    }
+
+    user.loginSecurityAlertActive = true; // keep record, just mark as read
+    user.loginSecurityAlertReadAt = new Date();
+    await user.save();
+
+    return res.status(200).json({
+      message: 'Alert marked as read',
+      user: {
+        id: user._id.toString(),
+        loginSecurityAlertActive: Boolean(user.loginSecurityAlertActive),
+        loginSecurityAlertTriggeredAt: user.loginSecurityAlertTriggeredAt ?? null,
+        loginSecurityAlertReadAt: user.loginSecurityAlertReadAt ?? null,
+      },
+    });
+  } catch (error) {
+    logger.error('Error marking login security alert as read', {
+      message: error.message,
+    });
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -545,5 +584,6 @@ module.exports = {
   deactivateUserByAdmin,
   activateUserByAdmin,
   deleteUserByAdmin,
+  markLoginSecurityAlertRead,
 };
 

@@ -65,6 +65,7 @@ export function AdminDashboard({
   onCreateUser,
   onUpdateUser,
   onDeleteUser,
+  onMarkLoginSecurityAlertRead,
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
@@ -199,11 +200,17 @@ export function AdminDashboard({
   const usersNeedingAttention = useMemo(() => {
     const base = [...(users || [])]
     return base
-      .filter((u) => Boolean(u.isDeactivated) || Number(u.failedLoginAttempts ?? 0) >= 3)
+      .filter((u) => {
+        const hasUnreadAlert = Boolean(u.loginSecurityAlertActive) && !u.loginSecurityAlertReadAt
+        return Boolean(u.isDeactivated) || hasUnreadAlert
+      })
       .sort((a, b) => {
         const aDeact = Boolean(a.isDeactivated)
         const bDeact = Boolean(b.isDeactivated)
         if (aDeact !== bDeact) return aDeact ? -1 : 1
+        const aAlert = Boolean(a.loginSecurityAlertActive) && !a.loginSecurityAlertReadAt
+        const bAlert = Boolean(b.loginSecurityAlertActive) && !b.loginSecurityAlertReadAt
+        if (aAlert !== bAlert) return aAlert ? -1 : 1
         return Number(b.failedLoginAttempts ?? 0) - Number(a.failedLoginAttempts ?? 0)
       })
       .slice(0, 8)
@@ -617,6 +624,8 @@ export function AdminDashboard({
                           {usersNeedingAttention.map((u) => {
                             const attempts = Number(u.failedLoginAttempts ?? 0)
                             const isDeactivated = Boolean(u.isDeactivated)
+                            const hasUnreadAlert =
+                              Boolean(u.loginSecurityAlertActive) && !u.loginSecurityAlertReadAt
                             const statusLabel = isDeactivated ? 'Deactivated' : 'Active'
                             const statusClass = isDeactivated
                               ? 'bg-red-50 text-red-600 border-red-100'
@@ -631,7 +640,7 @@ export function AdminDashboard({
 
                             const attentionBadge = isDeactivated
                               ? { label: 'Deactivated', className: 'bg-red-50 text-red-700 border-red-100' }
-                              : attempts >= 3
+                              : hasUnreadAlert
                                 ? { label: 'Alert', className: 'bg-orange-50 text-orange-700 border-orange-100' }
                                 : null
 
@@ -679,21 +688,48 @@ export function AdminDashboard({
                                 </td>
                                 <td className="px-4 py-3">
                                   {isDeactivated ? (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setToggleCandidate({
-                                          email: u.email,
-                                          username: u.username,
-                                          nextAction: 'activate',
-                                        })
-                                      }
-                                      className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                                    >
-                                      Activate
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setToggleCandidate({
+                                            email: u.email,
+                                            username: u.username,
+                                            nextAction: 'activate',
+                                          })
+                                        }
+                                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                      >
+                                        Activate
+                                      </button>
+                                      {hasUnreadAlert && (
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            if (!onMarkLoginSecurityAlertRead) return
+                                            await onMarkLoginSecurityAlertRead(u.id)
+                                          }}
+                                          className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-orange-200 bg-orange-50 text-orange-800 hover:bg-orange-100 transition-colors"
+                                        >
+                                          Mark as read
+                                        </button>
+                                      )}
+                                    </div>
                                   ) : (
-                                    <span className="text-xs text-slate-400">—</span>
+                                    hasUnreadAlert ? (
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (!onMarkLoginSecurityAlertRead) return
+                                          await onMarkLoginSecurityAlertRead(u.id)
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-orange-200 bg-orange-50 text-orange-800 hover:bg-orange-100 transition-colors"
+                                      >
+                                        Mark as read
+                                      </button>
+                                    ) : (
+                                      <span className="text-xs text-slate-400">—</span>
+                                    )
                                   )}
                                 </td>
                               </tr>

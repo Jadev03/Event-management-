@@ -41,6 +41,20 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Persistent admin-visible security alert for repeated failed logins.
+    // NOTE: This should NOT auto-clear on successful login; admin must mark as read.
+    loginSecurityAlertActive: {
+      type: Boolean,
+      default: false,
+    },
+    loginSecurityAlertTriggeredAt: {
+      type: Date,
+      default: null,
+    },
+    loginSecurityAlertReadAt: {
+      type: Date,
+      default: null,
+    },
     isDeactivated: {
       type: Boolean,
       default: false,

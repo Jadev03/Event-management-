@@ -106,6 +106,13 @@ const login = async (req, res, next) => {
           // Reset attempts on deactivation so admin re-activation starts clean.
           userDoc.failedLoginAttempts = 0;
 
+          // Keep a persistent admin alert (unread) for investigation.
+          userDoc.loginSecurityAlertActive = true;
+          if (!userDoc.loginSecurityAlertTriggeredAt) {
+            userDoc.loginSecurityAlertTriggeredAt = new Date();
+          }
+          userDoc.loginSecurityAlertReadAt = null;
+
           await userDoc.save();
 
           logger.warn('Auto-deactivated account due to failed logins', {
@@ -130,6 +137,12 @@ const login = async (req, res, next) => {
         await userDoc.save();
 
         if (nextAttempts === ADMIN_ALERT_THRESHOLD) {
+          // Persist an admin-visible alert until "Mark as read".
+          userDoc.loginSecurityAlertActive = true;
+          userDoc.loginSecurityAlertTriggeredAt = new Date();
+          userDoc.loginSecurityAlertReadAt = null;
+          await userDoc.save();
+
           logger.warn('Admin alert: 3 consecutive failed logins', {
             email: userDoc.email,
             role: userDoc.role,

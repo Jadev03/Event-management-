@@ -67,6 +67,9 @@ const AppContent = () => {
               role: u.role,
               isDeactivated: Boolean(u.isDeactivated),
               failedLoginAttempts: u.failedLoginAttempts ?? 0,
+              loginSecurityAlertActive: Boolean(u.loginSecurityAlertActive),
+              loginSecurityAlertTriggeredAt: u.loginSecurityAlertTriggeredAt ?? null,
+              loginSecurityAlertReadAt: u.loginSecurityAlertReadAt ?? null,
             })),
         )
       })
@@ -122,6 +125,42 @@ const AppContent = () => {
       }
     } catch (e) {
       alert(e?.response?.data?.message || 'Unable to update user status.')
+    }
+  }
+
+  const handleMarkLoginSecurityAlertRead = async (userId) => {
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      alert('You are not logged in.')
+      return false
+    }
+
+    try {
+      const res = await axios.post(
+        `${API_BASE_URL}/api/admin/users/${userId}/login-security-alert/read`,
+        {},
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      const updated = res.data?.user
+      if (updated?.id) {
+        setAdminUsers((prev) =>
+          prev.map((u) =>
+            u.id === updated.id
+              ? {
+                  ...u,
+                  loginSecurityAlertActive: Boolean(updated.loginSecurityAlertActive),
+                  loginSecurityAlertTriggeredAt:
+                    updated.loginSecurityAlertTriggeredAt ?? u.loginSecurityAlertTriggeredAt ?? null,
+                  loginSecurityAlertReadAt: updated.loginSecurityAlertReadAt ?? null,
+                }
+              : u,
+          ),
+        )
+      }
+      return true
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Unable to mark alert as read.')
+      return false
     }
   }
 
@@ -429,6 +468,7 @@ const AppContent = () => {
             onCreateUser={handleCreateUser}
             onUpdateUser={handleUpdateUser}
             onDeleteUser={handleDeleteUser}
+            onMarkLoginSecurityAlertRead={handleMarkLoginSecurityAlertRead}
           />
         </>
       )
