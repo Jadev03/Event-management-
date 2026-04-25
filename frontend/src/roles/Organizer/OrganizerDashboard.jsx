@@ -195,6 +195,28 @@ export function OrganizerDashboard({ user, onLogout }) {
     setIsCreateOpen(false)
   }
 
+  const parseDateInputLocal = (yyyyMmDd) => {
+    if (!yyyyMmDd) return null
+    const m = String(yyyyMmDd).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!m) return null
+    const y = Number.parseInt(m[1], 10)
+    const mo = Number.parseInt(m[2], 10)
+    const d = Number.parseInt(m[3], 10)
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d))
+      return null
+    const dt = new Date(y, mo - 1, d)
+    if (Number.isNaN(dt.getTime())) return null
+    dt.setHours(0, 0, 0, 0)
+    return dt
+  }
+
+  const getTomorrowDateInputMin = () => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() + 1)
+    return toDateInputValue(d)
+  }
+
   const toDateInputValue = (d) => {
     if (!d) return ''
     const dateObj = typeof d === 'string' ? new Date(d) : d
@@ -247,6 +269,13 @@ export function OrganizerDashboard({ user, onLogout }) {
       setEditError(
         'Please fill in event name, date, time, place and total seats.',
       )
+      return
+    }
+
+    const editMinDate = parseDateInputLocal(getTomorrowDateInputMin())
+    const editSelected = parseDateInputLocal(editForm.date)
+    if (!editSelected || !editMinDate || editSelected.getTime() < editMinDate.getTime()) {
+      setEditError('Event date must be a future date (from tomorrow onwards).')
       return
     }
 
@@ -307,6 +336,13 @@ export function OrganizerDashboard({ user, onLogout }) {
       setCreateError(
         'Please fill in event name, date, time, place and total seats.',
       )
+      return
+    }
+
+    const minDate = parseDateInputLocal(getTomorrowDateInputMin())
+    const selected = parseDateInputLocal(form.date)
+    if (!selected || !minDate || selected.getTime() < minDate.getTime()) {
+      setCreateError('Event date must be a future date (from tomorrow onwards).')
       return
     }
 
@@ -582,6 +618,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                     type="date"
                     value={form.date}
                     onChange={(e) => handleFormChange('date', e.target.value)}
+                    min={getTomorrowDateInputMin()}
                     className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
                   />
                 </div>
@@ -758,6 +795,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                     type="date"
                     value={editForm.date}
                     onChange={(e) => handleEditChange('date', e.target.value)}
+                    min={getTomorrowDateInputMin()}
                     className="w-full px-3 py-2 rounded-xl border border-black/5 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
                   />
                 </div>

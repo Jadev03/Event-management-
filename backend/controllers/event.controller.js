@@ -96,6 +96,24 @@ const createEvent = async (req, res) => {
       return res.status(400).json({ message: 'Invalid date' });
     }
 
+    // Require event date to be strictly in the future (tomorrow onwards).
+    // We compare by local day, since the UI sends yyyy-mm-dd from a date input.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const minDate = new Date(today);
+    minDate.setDate(minDate.getDate() + 1);
+    const parsedLocalDay = new Date(
+      parsedDate.getFullYear(),
+      parsedDate.getMonth(),
+      parsedDate.getDate(),
+    );
+    parsedLocalDay.setHours(0, 0, 0, 0);
+    if (parsedLocalDay.getTime() < minDate.getTime()) {
+      return res.status(400).json({
+        message: 'Event date must be a future date (from tomorrow onwards).',
+      });
+    }
+
     const created = await Event.create({
       name: String(name).trim(),
       description: String(description).trim(),
