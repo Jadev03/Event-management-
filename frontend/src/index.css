@@ -8,7 +8,22 @@
 
 @layer base {
   body {
-    @apply font-sans antialiased text-slate-900;
+    @apply font-sans antialiased text-slate-900 min-h-screen;
+    @apply bg-gradient-to-br from-slate-50 via-indigo-50/50 to-emerald-50/40;
+  }
+}
+
+@layer components {
+  .app-card {
+    @apply rounded-[32px] border border-black/5;
+    @apply bg-white/70 backdrop-blur-md;
+    @apply shadow-sm shadow-indigo-100/60;
+  }
+
+  .app-card-strong {
+    @apply rounded-[32px] border border-black/5;
+    @apply bg-white/90 backdrop-blur-md;
+    @apply shadow-md shadow-indigo-100/70;
   }
 }
 

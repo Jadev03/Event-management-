@@ -240,7 +240,7 @@ export function AdminDashboard({
   ]
 
   return (
-    <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
+    <div className="h-screen bg-gradient-to-br from-slate-50 via-indigo-50/50 to-emerald-50/40 overflow-hidden flex">
       <ChangePasswordModal
         open={isChangePasswordOpen}
         onClose={() => setIsChangePasswordOpen(false)}
@@ -512,7 +512,7 @@ export function AdminDashboard({
                 ].map((stat) => (
                   <div
                     key={stat.label}
-                    className="bg-white p-6 rounded-[24px] border border-black/5 shadow-sm flex flex-col justify-between"
+                    className="app-card p-6 rounded-[24px] flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div
@@ -546,7 +546,7 @@ export function AdminDashboard({
                 ))}
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-                <div className="bg-white p-6 rounded-[24px] border border-black/5 shadow-sm">
+                <div className="app-card p-6 rounded-[24px]">
                   <h2 className="text-lg font-bold text-slate-900 mb-2">
                     Recently added users
                   </h2>
@@ -584,7 +584,7 @@ export function AdminDashboard({
                     ))}
                   </ul>
                 </div>
-                <div className="bg-white p-6 rounded-[24px] border border-black/5 shadow-sm">
+                <div className="app-card p-6 rounded-[24px]">
                   <h2 className="text-lg font-bold text-slate-900 mb-2">
                     Account management
                   </h2>
@@ -747,7 +747,7 @@ export function AdminDashboard({
           {/* Analytics tab */}
           {activeTab === 'analytics' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-3 bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+              <div className="lg:col-span-3 app-card p-8">
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h2 className="text-xl font-bold text-slate-900">
@@ -835,7 +835,7 @@ export function AdminDashboard({
                 </div>
               </div>
 
-              <div className="lg:col-span-3 bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+              <div className="lg:col-span-3 app-card p-8">
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h2 className="text-xl font-bold text-slate-900">

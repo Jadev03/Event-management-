@@ -395,7 +395,7 @@ export function StudentDashboard({ user, onLogout }) {
   }
 
   return (
-    <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
+    <div className="h-screen bg-gradient-to-br from-slate-50 via-indigo-50/50 to-emerald-50/40 overflow-hidden flex">
       <ChangePasswordModal
         open={isChangePasswordOpen}
         onClose={() => setIsChangePasswordOpen(false)}
@@ -536,7 +536,7 @@ export function StudentDashboard({ user, onLogout }) {
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.06 }}
-                  className="bg-white p-6 rounded-[24px] border border-black/5 shadow-sm"
+                  className="app-card p-6 rounded-[24px]"
                 >
                   <div
                     className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${stat.color}`}
@@ -599,7 +599,7 @@ function StudentOverviewSection({
     <section className="grid grid-cols-1 gap-8">
       {/* Registered / Attended / This Week */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="bg-white p-7 rounded-[32px] border border-black/5 shadow-sm">
+        <div className="app-card p-7">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
@@ -651,7 +651,7 @@ function StudentOverviewSection({
           </div>
         </div>
 
-        <div className="bg-white p-7 rounded-[32px] border border-black/5 shadow-sm">
+        <div className="app-card p-7">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
@@ -702,7 +702,7 @@ function StudentOverviewSection({
           </div>
         </div>
 
-        <div className="bg-white p-7 rounded-[32px] border border-black/5 shadow-sm">
+        <div className="app-card p-7">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-900">This week</h2>
@@ -1176,7 +1176,7 @@ function StudentTicketsSection({ user, events, onCanceled }) {
             <motion.div
               initial={{ opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
-              className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm"
+              className="app-card p-8"
             >
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <Info size={20} className="text-indigo-600" />

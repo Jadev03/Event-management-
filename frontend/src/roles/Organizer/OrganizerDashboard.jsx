@@ -424,7 +424,7 @@ export function OrganizerDashboard({ user, onLogout }) {
   }, [events])
 
   return (
-    <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
+    <div className="h-screen bg-gradient-to-br from-slate-50 via-indigo-50/50 to-emerald-50/40 overflow-hidden flex">
       <ChangePasswordModal
         open={isChangePasswordOpen}
         onClose={() => setIsChangePasswordOpen(false)}
@@ -523,14 +523,7 @@ export function OrganizerDashboard({ user, onLogout }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="h-16 bg-white border-b border-black/5 flex items-center justify-between px-6 md:px-8">
-          <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-2xl w-[22rem] max-w-full border border-black/5">
-            <Search size={18} className="text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search events or registrations..."
-              className="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-400"
-            />
-          </div>
+          <div className="flex-1" />
 
           <div className="flex items-center gap-5">
             <button
@@ -955,7 +948,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.1 }}
-                    className="bg-white p-6 rounded-[24px] border border-black/5 shadow-sm"
+                    className="app-card p-6 rounded-[24px]"
                   >
                     <div
                       className={cn(
@@ -977,7 +970,7 @@ export function OrganizerDashboard({ user, onLogout }) {
 
               <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Registration Trends (compact for overview) */}
-                <div className="lg:col-span-2 bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+                <div className="lg:col-span-2 app-card p-8">
                   <h2 className="text-xl font-bold text-slate-900 mb-8">
                     Check-ins (Top events)
                   </h2>
@@ -1022,7 +1015,7 @@ export function OrganizerDashboard({ user, onLogout }) {
                 </div>
 
                 {/* Event Status Distribution */}
-                <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+                <div className="app-card p-8">
                   <h2 className="text-xl font-bold text-slate-900 mb-8">
                     Event Status
                   </h2>
@@ -1066,7 +1059,7 @@ export function OrganizerDashboard({ user, onLogout }) {
               </section>
 
               <section className="grid grid-cols-1 gap-8">
-                <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+                <div className="app-card p-8">
                   <div className="flex items-center justify-between mb-8">
                     <div>
                       <h2 className="text-xl font-bold text-slate-900">
@@ -1543,7 +1536,7 @@ function TicketScannerPanel({
       </div>
 
       {!scannerEvents?.length && (
-        <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+        <div className="app-card p-8">
           <p className="text-sm text-slate-600">
             No accepted (approved) events found yet. Once an event is approved,
             it will appear here for scanning.
@@ -1553,7 +1546,7 @@ function TicketScannerPanel({
 
       {scannerEvents?.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 bg-white p-6 rounded-[28px] border border-black/5 shadow-sm space-y-4">
+          <div className="lg:col-span-1 app-card p-6 rounded-[28px] space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-slate-600">
@@ -1686,7 +1679,7 @@ function TicketScannerPanel({
             )}
           </div>
 
-          <div className="lg:col-span-2 bg-white p-6 rounded-[28px] border border-black/5 shadow-sm">
+          <div className="lg:col-span-2 app-card p-6 rounded-[28px]">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Camera</h2>

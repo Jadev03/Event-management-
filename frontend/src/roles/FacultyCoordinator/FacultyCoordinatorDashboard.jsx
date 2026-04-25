@@ -280,7 +280,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
   ]
 
   return (
-    <div className="h-screen bg-[#F5F5F5] overflow-hidden flex">
+    <div className="h-screen bg-gradient-to-br from-slate-50 via-indigo-50/50 to-emerald-50/40 overflow-hidden flex">
       <ChangePasswordModal
         open={isChangePasswordOpen}
         onClose={() => setIsChangePasswordOpen(false)}
@@ -408,7 +408,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.1 }}
-                    className="bg-white p-6 rounded-[24px] border border-black/5 shadow-sm"
+                    className="app-card p-6 rounded-[24px]"
                   >
                     <div
                       className={cn(
@@ -426,7 +426,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
 
               {/* Event trends + Academic Events */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+                <div className="lg:col-span-2 app-card p-8">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold text-slate-900">Event trends</h2>
                     <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full text-xs font-bold">
@@ -451,7 +451,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                   </div>
                 </div>
 
-                <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+                <div className="app-card p-8">
                   <h2 className="text-xl font-bold text-slate-900 mb-6">Academic Events</h2>
                   <div className="space-y-6">
                     {approvedHighlights.length === 0 && (
@@ -521,7 +521,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                 </button>
               </div>
 
-              <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
+              <div className="app-card p-8">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-bold text-slate-900">
                     Pending approvals
