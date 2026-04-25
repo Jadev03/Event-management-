@@ -110,6 +110,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
+  const [approvedHighlights, setApprovedHighlights] = useState([])
   const [overview, setOverview] = useState({
     stats: {
       totalEvents: 0,
@@ -143,6 +144,16 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
       .catch(() => {
         // keep defaults
       })
+
+    axios
+      .get(`${API_BASE_URL}/api/events/approved`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .then((res) => {
+        const items = res.data?.events ?? []
+        setApprovedHighlights(items.slice(0, 4))
+      })
+      .catch(() => setApprovedHighlights([]))
 
     axios
       .get(`${API_BASE_URL}/api/faculty/notifications`, {
@@ -284,8 +295,13 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
   const pendingCount = pendingEvents?.length ?? 0
   const pendingList = useMemo(() => pendingEvents || [], [pendingEvents])
 
+  const computedTotalEvents =
+    Number(overview.stats.pendingApprovals ?? 0) +
+    Number(overview.stats.approvedEvents ?? 0) +
+    Number(overview.stats.rejectedEvents ?? 0)
+
   const stats = [
-    { label: 'Total Events', value: String(overview.stats.totalEvents ?? 0), icon: Calendar, color: 'bg-indigo-50 text-indigo-600' },
+    { label: 'Total Events', value: String(computedTotalEvents), icon: Calendar, color: 'bg-indigo-50 text-indigo-600' },
     { label: 'Pending Approvals', value: String(overview.stats.pendingApprovals ?? 0), icon: Clock, color: 'bg-orange-50 text-orange-600' },
     { label: 'Approved Events', value: String(overview.stats.approvedEvents ?? 0), icon: BookOpen, color: 'bg-emerald-50 text-emerald-600' },
     { label: 'Rejected Events', value: String(overview.stats.rejectedEvents ?? 0), icon: Award, color: 'bg-red-50 text-red-600' },
@@ -512,25 +528,31 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                 <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
                   <h2 className="text-xl font-bold text-slate-900 mb-6">Academic Events</h2>
                   <div className="space-y-6">
-                    {MOCK_EVENTS.map((event) => (
+                    {approvedHighlights.length === 0 && (
+                      <p className="text-sm text-slate-600">
+                        No approved events available yet.
+                      </p>
+                    )}
+                    {approvedHighlights.map((event) => (
                       <div key={event.id} className="group cursor-pointer">
                         <div className="flex items-center justify-between">
                           <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[9px] font-bold uppercase rounded-md">
-                            {event.category}
+                            {event.type === 'work' ? 'workshop' : event.type}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">
-                            {event.dateLabel}
+                            {new Date(event.date).toLocaleDateString(undefined, {
+                              year: 'numeric',
+                              month: 'short',
+                              day: '2-digit',
+                            })}
                           </span>
                         </div>
                         <h4 className="text-sm font-bold text-slate-900 mt-2 group-hover:text-indigo-600 transition-colors">
-                          {event.title}
+                          {event.name}
                         </h4>
                         <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
                           <span className="flex items-center gap-1">
-                            <MapPin size={12} /> {event.location}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Users size={12} /> {event.registeredCount} Students
+                            <MapPin size={12} /> {event.place}
                           </span>
                         </div>
                         <div className="mt-4 pt-4 border-t border-black/5 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
@@ -857,11 +879,10 @@ function FacultyEventsSection() {
   }, [API_BASE_URL])
 
   const normalizedEvents = useMemo(() => {
-    const source = events?.length ? events : MOCK_EVENTS
-    return source.map((e) => {
-      // If already in mock format, keep as-is.
-      if (e.title && e.category) return e
-
+    const allowedStatuses = new Set(['pending', 'approved', 'rejected'])
+    return (events || [])
+      .filter((e) => allowedStatuses.has(String(e?.status || '').toLowerCase()))
+      .map((e) => {
       const type = e.type === 'work' ? 'workshop' : e.type
       const dateLabel = new Date(e.date).toLocaleDateString(undefined, {
         month: 'short',
@@ -876,12 +897,12 @@ function FacultyEventsSection() {
         time: e.time,
         location: e.place,
         category: type,
-        registeredCount: 0,
+        registeredCount: Number(e.registeredCount ?? 0),
         capacity: e.totalSeats,
         image: e.thumbnailUrl || '',
         status: e.status,
       }
-    })
+      })
   }, [events])
 
   const filteredEvents =
@@ -925,6 +946,10 @@ function FacultyEventsSection() {
 
       {loadStatus === 'loading' && !events?.length && (
         <p className="text-sm text-slate-600">Loading events…</p>
+      )}
+
+      {loadStatus !== 'loading' && !events?.length && !loadError && (
+        <p className="text-sm text-slate-600">No events found.</p>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

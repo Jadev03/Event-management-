@@ -11,7 +11,6 @@ const getFacultyOverview = async (req, res) => {
 
     const stats = events.reduce(
       (acc, e) => {
-        acc.totalEvents += 1;
         if (e.status === 'pending') acc.pendingApprovals += 1;
         if (e.status === 'approved') acc.approvedEvents += 1;
         if (e.status === 'rejected') acc.rejectedEvents += 1;
@@ -26,6 +25,12 @@ const getFacultyOverview = async (req, res) => {
         completedEvents: 0,
       }
     );
+
+    // Per dashboard requirement: Total Events = Pending + Approved + Rejected
+    stats.totalEvents =
+      (stats.pendingApprovals || 0) +
+      (stats.approvedEvents || 0) +
+      (stats.rejectedEvents || 0);
 
     // Trend: events created over last 6 months (by createdAt month label)
     const now = new Date();
