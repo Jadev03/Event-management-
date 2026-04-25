@@ -12,9 +12,7 @@ import {
   LayoutDashboard,
   Menu,
   X,
-  Search,
   LogOut,
-  Bell,
   Lock,
 } from 'lucide-react'
 import { motion } from 'motion/react'
@@ -27,14 +25,8 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  Legend,
 } from 'recharts'
-
-const formatDateLabel = (iso) => {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })
-}
 
 const MOCK_EVENTS = [
   {
@@ -107,9 +99,7 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
 
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
-  const [notifications, setNotifications] = useState([])
   const [approvedHighlights, setApprovedHighlights] = useState([])
   const [overview, setOverview] = useState({
     stats: {
@@ -121,7 +111,6 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
     },
     trends: [],
   })
-  const unreadCount = (notifications || []).filter((n) => !n.read).length
 
   const [pendingEvents, setPendingEvents] = useState([])
   const [pendingError, setPendingError] = useState('')
@@ -154,23 +143,6 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
         setApprovedHighlights(items.slice(0, 4))
       })
       .catch(() => setApprovedHighlights([]))
-
-    axios
-      .get(`${API_BASE_URL}/api/faculty/notifications`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      .then((res) => {
-        const items = res.data?.notifications ?? []
-        setNotifications(
-          items.map((n) => ({
-            ...n,
-            dateLabel: formatDateLabel(n.createdAt),
-          })),
-        )
-      })
-      .catch(() => {
-        setNotifications([])
-      })
   }, [API_BASE_URL])
 
   const loadPending = async () => {
@@ -395,58 +367,8 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 bg-white border-b border-black/5 flex items-center justify-between px-6 md:px-8 z-10">
-          <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-2xl w-[22rem] max-w-full border border-black/5">
-            <Search size={18} className="text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search events, students..."
-              className="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-400"
-            />
-          </div>
-
+          <div />
           <div className="flex items-center gap-5">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setNotificationsOpen((v) => !v)}
-                className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-colors"
-                aria-label="Targeted notifications"
-              >
-                <Bell size={20} />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-indigo-600 rounded-full border-2 border-white" />
-                )}
-              </button>
-              {notificationsOpen && (
-                <div className="absolute right-0 mt-2 w-96 bg-white rounded-2xl border border-black/5 shadow-xl z-50 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-black/5 flex items-center justify-between bg-slate-50">
-                    <p className="text-sm font-bold text-slate-900">Targeted notifications</p>
-                    <button
-                      type="button"
-                      onClick={() => setNotificationsOpen(false)}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-900"
-                    >
-                      Close
-                    </button>
-                  </div>
-                  <div className="max-h-80 overflow-auto">
-                    {notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className={cn(
-                          'px-4 py-3 border-b border-black/5 last:border-b-0',
-                          n.read ? 'bg-white' : 'bg-indigo-50/40',
-                        )}
-                      >
-                        <p className="text-sm font-semibold text-slate-900">{n.title}</p>
-                        <p className="text-sm text-slate-600 mt-0.5">{n.message}</p>
-                        <p className="text-xs text-slate-400 mt-1">{n.dateLabel}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
             <div className="flex items-center gap-3 pl-5 border-l border-black/5">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-slate-900">{user?.username ?? 'Faculty'}</p>
@@ -519,7 +441,11 @@ export function FacultyCoordinatorDashboard({ user, onLogout }) {
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
                         <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
-                        <Line type="monotone" dataKey="value" stroke="#4F46E5" strokeWidth={3} dot={{ r: 6, fill: '#4F46E5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                        <Legend />
+                        <Line type="monotone" dataKey="pendingApprovals" name="Pending" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="approvedEvents" name="Approved" stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="rejectedEvents" name="Rejected" stroke="#EF4444" strokeWidth={2} dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="totalEvents" name="Total" stroke="#4F46E5" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>

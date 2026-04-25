@@ -2,12 +2,12 @@ const { Event } = require('../models/event.model');
 const { Notification } = require('../models/notification.model');
 const { logger } = require('../utils/logger');
 
-const monthKey = (d) =>
+const monthLabel = (d) =>
   new Date(d).toLocaleDateString(undefined, { month: 'short' });
 
 const getFacultyOverview = async (req, res) => {
   try {
-    const events = await Event.find({}).select('status createdAt').lean();
+    const events = await Event.find({}).select('status date').lean();
 
     const stats = events.reduce(
       (acc, e) => {
@@ -32,24 +32,82 @@ const getFacultyOverview = async (req, res) => {
       (stats.approvedEvents || 0) +
       (stats.rejectedEvents || 0);
 
-    // Trend: events created over last 6 months (by createdAt month label)
-    const now = new Date();
-    const months = [];
-    for (let i = 5; i >= 0; i -= 1) {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - i);
-      months.push({
-        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        name: monthKey(d),
-        value: 0,
-      });
+    // Trend: by month, split by status; monthTotal = pending+approved+rejected.
+    // IMPORTANT: Use the same underlying dataset as the top stats (all events),
+    // so the sum across the trend series equals the stats values.
+    const monthAgg = await Event.aggregate([
+      {
+        $match: {
+          status: { $in: ['pending', 'approved', 'rejected'] },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            y: { $year: '$date' },
+            m: { $month: '$date' },
+            status: '$status',
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { '_id.y': 1, '_id.m': 1 } },
+    ]);
+
+    // Build continuous month list from earliest->latest month in aggregation.
+    let min = null; // Date
+    let max = null; // Date
+    for (const row of monthAgg || []) {
+      const y = row?._id?.y;
+      const m1 = row?._id?.m;
+      if (!y || !m1) continue;
+      const d = new Date(y, m1 - 1, 1);
+      if (!min || d < min) min = d;
+      if (!max || d > max) max = d;
     }
-    const indexByKey = new Map(months.map((m, idx) => [m.key, idx]));
-    for (const e of events) {
-      const d = new Date(e.createdAt);
-      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+    const months = [];
+    const indexByKey = new Map();
+    if (min && max) {
+      const cursor = new Date(min);
+      while (cursor <= max) {
+        const y = cursor.getFullYear();
+        const m1 = cursor.getMonth() + 1;
+        const key = `${y}-${String(m1).padStart(2, '0')}`;
+        indexByKey.set(key, months.length);
+        months.push({
+          key,
+          name: monthLabel(cursor),
+          pendingApprovals: 0,
+          approvedEvents: 0,
+          rejectedEvents: 0,
+          totalEvents: 0,
+        });
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+    }
+
+    for (const row of monthAgg || []) {
+      const y = row?._id?.y;
+      const m1 = row?._id?.m;
+      const status = row?._id?.status;
+      const count = row?.count || 0;
+      if (!y || !m1 || !status) continue;
+
+      const k = `${y}-${String(m1).padStart(2, '0')}`;
       const idx = indexByKey.get(k);
-      if (idx !== undefined) months[idx].value += 1;
+      if (idx === undefined) continue;
+
+      if (status === 'pending') months[idx].pendingApprovals += count;
+      else if (status === 'approved') months[idx].approvedEvents += count;
+      else if (status === 'rejected') months[idx].rejectedEvents += count;
+    }
+
+    for (const m of months) {
+      m.totalEvents =
+        (m.pendingApprovals || 0) +
+        (m.approvedEvents || 0) +
+        (m.rejectedEvents || 0);
     }
 
     return res.status(200).json({ stats, trends: months });
