@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import axios from 'axios'
 import {
-  Bell,
   Calendar,
   CheckCircle2,
   Clock,
@@ -11,13 +10,11 @@ import {
   MapPin,
   Menu,
   QrCode,
-  Search,
   X,
   Users,
   ArrowRight,
   LogOut,
   Download,
-  Share2,
   Info,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
@@ -244,7 +241,6 @@ export function StudentDashboard({ user, onLogout }) {
   const { events, loadStatus, loadError } = useStudentEventsData()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [registrations, setRegistrations] = useState({})
 
@@ -317,31 +313,6 @@ export function StudentDashboard({ user, onLogout }) {
       },
     ],
     [attendedEvents.length, registeredUpcoming.length, thisWeekUpcoming.length],
-  )
-
-  const notifications = useMemo(
-    () => [
-      {
-        id: 'n1',
-        title: 'Event reminder',
-        message: 'AI Workshop 2026 starts in 2 hours.',
-        dateLabel: 'Today • 08:00',
-        read: false,
-      },
-      {
-        id: 'n2',
-        title: 'Registration confirmed',
-        message: 'You are registered for Annual Sports Meet.',
-        dateLabel: 'Yesterday • 17:20',
-        read: true,
-      },
-    ],
-    [],
-  )
-
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications],
   )
 
   const sidebarItems = useMemo(
@@ -512,82 +483,17 @@ export function StudentDashboard({ user, onLogout }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Topbar */}
         <header className="h-16 bg-white border-b border-black/5 flex items-center justify-between px-6 md:px-8 z-10">
-          <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-2xl w-[22rem] max-w-full border border-black/5">
-            <Search size={18} className="text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search events..."
-              className="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-400"
-            />
-          </div>
+          <div className="flex-1" />
 
-          <div className="flex items-center gap-5">
-            <div className="relative">
-              <button
-                onClick={() => setIsNotificationsOpen((v) => !v)}
-                className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-colors"
-                aria-label="Notifications"
-              >
-                <Bell size={20} />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-indigo-600 rounded-full border-2 border-white" />
-                )}
-              </button>
-
-              {isNotificationsOpen && (
-                <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl border border-black/5 shadow-2xl shadow-indigo-100 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-black/5 flex items-center justify-between">
-                    <p className="text-sm font-bold text-slate-900">
-                      Notifications
-                    </p>
-                    <button
-                      onClick={() => setIsNotificationsOpen(false)}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-900"
-                    >
-                      Close
-                    </button>
-                  </div>
-                  <div className="max-h-72 overflow-auto">
-                    {notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className={`px-4 py-3 border-b border-black/5 last:border-b-0 ${
-                          n.read ? 'bg-white' : 'bg-indigo-50/40'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">
-                              {n.title}
-                            </p>
-                            <p className="text-sm text-slate-600 mt-0.5">
-                              {n.message}
-                            </p>
-                            <p className="text-xs text-slate-400 mt-1">
-                              {n.dateLabel}
-                            </p>
-                          </div>
-                          {!n.read && (
-                            <span className="mt-1 w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-semibold text-slate-900">
+                {user.username}
+              </p>
+              <p className="text-xs text-slate-500 capitalize">student</p>
             </div>
-
-            <div className="flex items-center gap-3 pl-5 border-l border-black/5">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-slate-900">
-                  {user.username}
-                </p>
-                <p className="text-xs text-slate-500 capitalize">student</p>
-              </div>
-              <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold border border-indigo-200">
-                {user.username?.charAt(0) ?? 'S'}
-              </div>
+            <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold border border-indigo-200">
+              {user.username?.charAt(0) ?? 'S'}
             </div>
           </div>
         </header>
